@@ -24,6 +24,8 @@
 #include <pybind11/stl.h>
 #endif
 
+#include "crocoddyl_msgs/inertial_parameters_publisher.h"
+#include "crocoddyl_msgs/inertial_parameters_subscriber.h"
 #include "crocoddyl_msgs/solver_statistics_publisher.h"
 #include "crocoddyl_msgs/solver_statistics_subscriber.h"
 #include "crocoddyl_msgs/solver_trajectory_publisher.h"
@@ -32,8 +34,6 @@
 #include "crocoddyl_msgs/whole_body_state_subscriber.h"
 #include "crocoddyl_msgs/whole_body_trajectory_publisher.h"
 #include "crocoddyl_msgs/whole_body_trajectory_subscriber.h"
-#include "crocoddyl_msgs/inertial_parameters_publisher.h"
-#include "crocoddyl_msgs/inertial_parameters_subscriber.h"
 
 PYBIND11_MODULE(crocoddyl_ros, m) {
   namespace py = pybind11;
@@ -160,10 +160,18 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
            py::arg("topic") = "/crocoddyl/whole_body_state",
            py::arg("frame") = "odom")
       .def(py::init<pinocchio::Model &>(), py::arg("model"))
-      .def("publish", static_cast<void (WholeBodyStateRosPublisher::*)(const double, const Eigen::Ref<const Eigen::VectorXd> &, 
-      const Eigen::Ref<const Eigen::VectorXd> &, const Eigen::Ref<const Eigen::VectorXd> &, const std::map<std::string, pinocchio::SE3> &,
-      const std::map<std::string, pinocchio::Motion> &, const std::map<std::string, std::tuple<pinocchio::Force, ContactType, ContactStatus>> &,
-      const std::map<std::string, std::pair<Eigen::Vector3d, double>> &)>(&WholeBodyStateRosPublisher::publish),
+      .def("publish",
+           static_cast<void (WholeBodyStateRosPublisher::*)(
+               const double, const Eigen::Ref<const Eigen::VectorXd> &,
+               const Eigen::Ref<const Eigen::VectorXd> &,
+               const Eigen::Ref<const Eigen::VectorXd> &,
+               const std::map<std::string, pinocchio::SE3> &,
+               const std::map<std::string, pinocchio::Motion> &,
+               const std::map<
+                   std::string,
+                   std::tuple<pinocchio::Force, ContactType, ContactStatus>> &,
+               const std::map<std::string, std::pair<Eigen::Vector3d, double>>
+                   &)>(&WholeBodyStateRosPublisher::publish),
            "Publish a whole-body state ROS message.\n\n"
            ":param t: time in secs\n"
            ":param q: configuration vector (dimension: model.nq)\n"
@@ -174,11 +182,21 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
            ":param f: contact force, type and status\n"
            ":param s: contact surface and friction coefficient",
            py::arg("t"), py::arg("q"), py::arg("v"), py::arg("tau"),
-           py::arg("p") = DEFAULT_SE3, py::arg("pd") = DEFAULT_MOTION, py::arg("f") = DEFAULT_FORCE, py::arg("s") = DEFAULT_FORCE)
-     .def("publish", static_cast<void (WholeBodyStateRosPublisher::*)(const double, const Eigen::Ref<const Eigen::VectorXd> &,  const Eigen::Ref<const Eigen::VectorXd> &, 
-      const Eigen::Ref<const Eigen::VectorXd> &, const Eigen::Ref<const Eigen::VectorXd> &, const std::map<std::string, pinocchio::SE3> &,
-      const std::map<std::string, pinocchio::Motion> &, const std::map<std::string, std::tuple<pinocchio::Force, ContactType, ContactStatus>> &,
-      const std::map<std::string, std::pair<Eigen::Vector3d, double>> &)>(&WholeBodyStateRosPublisher::publish),
+           py::arg("p") = DEFAULT_SE3, py::arg("pd") = DEFAULT_MOTION,
+           py::arg("f") = DEFAULT_FORCE, py::arg("s") = DEFAULT_FORCE)
+      .def("publish",
+           static_cast<void (WholeBodyStateRosPublisher::*)(
+               const double, const Eigen::Ref<const Eigen::VectorXd> &,
+               const Eigen::Ref<const Eigen::VectorXd> &,
+               const Eigen::Ref<const Eigen::VectorXd> &,
+               const Eigen::Ref<const Eigen::VectorXd> &,
+               const std::map<std::string, pinocchio::SE3> &,
+               const std::map<std::string, pinocchio::Motion> &,
+               const std::map<
+                   std::string,
+                   std::tuple<pinocchio::Force, ContactType, ContactStatus>> &,
+               const std::map<std::string, std::pair<Eigen::Vector3d, double>>
+                   &)>(&WholeBodyStateRosPublisher::publish),
            "Publish a whole-body state ROS message.\n\n"
            ":param t: time in secs\n"
            ":param q: configuration vector (dimension: model.nq)\n"
@@ -189,19 +207,24 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
            ":param pd: contact velocity\n"
            ":param f: contact force, type and status\n"
            ":param s: contact surface and friction coefficient",
-           py::arg("t"), py::arg("q"), py::arg("v"), py::arg("a"), py::arg("tau"),
-           py::arg("p") = DEFAULT_SE3, py::arg("pd") = DEFAULT_MOTION, py::arg("f") = DEFAULT_FORCE, py::arg("s") = DEFAULT_FORCE)
-     .def("update_model_inertial_parameters", &WholeBodyStateRosPublisher::update_model_inertial_parameters,
+           py::arg("t"), py::arg("q"), py::arg("v"), py::arg("a"),
+           py::arg("tau"), py::arg("p") = DEFAULT_SE3,
+           py::arg("pd") = DEFAULT_MOTION, py::arg("f") = DEFAULT_FORCE,
+           py::arg("s") = DEFAULT_FORCE)
+      .def("update_model_inertial_parameters",
+           &WholeBodyStateRosPublisher::update_model_inertial_parameters,
            "Update the inertial parameters of the pinocchio model.\n\n"
-           ":param body_name: name of the desired body to update the inertial parameters\n"
+           ":param body_name: name of the desired body to update the inertial "
+           "parameters\n"
            ":param psi: Vector containing the inertial parameters\n",
            py::arg("body_name"), py::arg("psi"))
-     .def("get_model_inertial_parameters", &WholeBodyStateRosPublisher::get_model_inertial_parameters,
+      .def("get_model_inertial_parameters",
+           &WholeBodyStateRosPublisher::get_model_inertial_parameters,
            "Returns the inertial parameters of the pinocchio model.\n\n"
-           ":param body_name: name of the desired body to get the inertial parameters\n"
+           ":param body_name: name of the desired body to get the inertial "
+           "parameters\n"
            ":return psi: Vector containing the inertial parameters\n",
            py::arg("body_name"));
-
 
   py::class_<WholeBodyStateRosSubscriber,
              std::unique_ptr<WholeBodyStateRosSubscriber, py::nodelete>>(
@@ -211,8 +234,8 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
            py::arg("model"), py::arg("topic") = "/crocoddyl/whole_body_state",
            py::arg("frame") = "odom")
       .def(py::init<pinocchio::Model &, const std::vector<std::string> &,
-                    const Eigen::Ref<const Eigen::VectorXd> &, const std::string &,
-                    const std::string &>(),
+                    const Eigen::Ref<const Eigen::VectorXd> &,
+                    const std::string &, const std::string &>(),
            py::arg("model"), py::arg("locked_joints"), py::arg("qref"),
            py::arg("topic") = "/crocoddyl/whole_body_state",
            py::arg("frame") = "odom")
@@ -225,14 +248,18 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
            "(wrench, type and status), and contact surface (norm and friction\n"
            "coefficient).")
       .def("has_new_msg", &WholeBodyStateRosSubscriber::has_new_msg)
-      .def("update_model_inertial_parameters", &WholeBodyStateRosSubscriber::update_model_inertial_parameters,
+      .def("update_model_inertial_parameters",
+           &WholeBodyStateRosSubscriber::update_model_inertial_parameters,
            "Update the inertial parameters of the pinocchio model.\n\n"
-           ":param body_name: name of the desired body to update the inertial parameters\n"
+           ":param body_name: name of the desired body to update the inertial "
+           "parameters\n"
            ":param psi: Vector containing the inertial parameters\n",
            py::arg("body_name"), py::arg("psi"))
-      .def("get_model_inertial_parameters", &WholeBodyStateRosSubscriber::get_model_inertial_parameters,
+      .def("get_model_inertial_parameters",
+           &WholeBodyStateRosSubscriber::get_model_inertial_parameters,
            "Returns the inertial parameters of the pinocchio model.\n\n"
-           ":param body_name: name of the desired body to get the inertial parameters\n"
+           ":param body_name: name of the desired body to get the inertial "
+           "parameters\n"
            ":return psi: Vector containing the inertial parameters\n",
            py::arg("body_name"));
 
@@ -245,8 +272,8 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
            py::arg("topic") = "/crocoddyl/whole_body_trajectory",
            py::arg("frame") = "odom", py::arg("queue") = 10)
       .def(py::init<pinocchio::Model &, const std::vector<std::string> &,
-                    const Eigen::Ref<const Eigen::VectorXd> &, const std::string &,
-                    const std::string &, int>(),
+                    const Eigen::Ref<const Eigen::VectorXd> &,
+                    const std::string &, const std::string &, int>(),
            py::arg("model"), py::arg("locked_joints"), py::arg("qref"),
            py::arg("topic") = "/crocoddyl/whole_body_state",
            py::arg("frame") = "odom", py::arg("queue") = 10)
@@ -260,8 +287,11 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
            ":param pds: list of contact velocities\n"
            ":param fs: list of contact forces, types and statuses\n"
            ":param ss: list of contact surfaces and friction coefficients",
-           py::arg("ts"), py::arg("xs"), py::arg("us"), py::arg("ps") = DEFAULT_SE3_VECTOR,
-           py::arg("pds") = DEFAULT_MOTION_VECTOR, py::arg("fs") = DEFAULT_FORCE_VECTOR, py::arg("ss") = DEFAULT_FRICTION_VECTOR);
+           py::arg("ts"), py::arg("xs"), py::arg("us"),
+           py::arg("ps") = DEFAULT_SE3_VECTOR,
+           py::arg("pds") = DEFAULT_MOTION_VECTOR,
+           py::arg("fs") = DEFAULT_FORCE_VECTOR,
+           py::arg("ss") = DEFAULT_FRICTION_VECTOR);
 
   py::class_<WholeBodyTrajectoryRosSubscriber,
              std::unique_ptr<WholeBodyTrajectoryRosSubscriber, py::nodelete>>(
@@ -286,9 +316,10 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
            "friction\n"
            "coefficients.")
       .def("has_new_msg", &WholeBodyTrajectoryRosSubscriber::has_new_msg);
-  
-  py::class_<MultibodyInertialParametersRosPublisher,
-             std::unique_ptr<MultibodyInertialParametersRosPublisher, py::nodelete>>(
+
+  py::class_<
+      MultibodyInertialParametersRosPublisher,
+      std::unique_ptr<MultibodyInertialParametersRosPublisher, py::nodelete>>(
       m, "MultibodyInertialParametersRosPublisher")
       .def(py::init<const std::string &>(),
            py::arg("topic") = "/crocoddyl/inertial_parameters")
@@ -297,20 +328,24 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
            ":param parameters: multibody inertial parameters",
            py::arg("parameters"));
 
-  py::class_<MultibodyInertialParametersRosSubscriber,
-             std::unique_ptr<MultibodyInertialParametersRosSubscriber, py::nodelete>>(
+  py::class_<
+      MultibodyInertialParametersRosSubscriber,
+      std::unique_ptr<MultibodyInertialParametersRosSubscriber, py::nodelete>>(
       m, "MultibodyInertialParametersRosSubscriber")
       .def(py::init<const std::string &>(),
            py::arg("topic") = "/crocoddyl/inertial_parameters")
-      .def("get_parameters", &MultibodyInertialParametersRosSubscriber::get_parameters,
+      .def("get_parameters",
+           &MultibodyInertialParametersRosSubscriber::get_parameters,
            "Get the latest multibody inertial parameters.\n\n"
            ":return: dictionary of body names and inertial parameters pair\n")
-      .def("has_new_msg", &MultibodyInertialParametersRosSubscriber::has_new_msg);
+      .def("has_new_msg",
+           &MultibodyInertialParametersRosSubscriber::has_new_msg);
 
-  m.def("getRootJointId", &getRootJointId<0, pinocchio::JointCollectionDefaultTpl>,
-           "Return the root joint id.\n\n"
-           ":param model: Pinocchio model\n"
-           ":return root joint id");
+  m.def("getRootJointId",
+        &getRootJointId<0, pinocchio::JointCollectionDefaultTpl>,
+        "Return the root joint id.\n\n"
+        ":param model: Pinocchio model\n"
+        ":return root joint id");
 
   m.def("getRootNq", &getRootNq<0, pinocchio::JointCollectionDefaultTpl>,
            "Return the root joint nq dimension.\n\n"

@@ -98,7 +98,7 @@ else() # ROS 1
     SolverTrajectory.msg
     InertialParameters.msg
     MultibodyInertialParameters.msg)
-    generate_messages(DEPENDENCIES std_msgs whole_body_state_msgs)
+  generate_messages(DEPENDENCIES std_msgs whole_body_state_msgs)
   # Define catkin dependencies
   catkin_package(
     INCLUDE_DIRS

@@ -290,18 +290,32 @@ class TestWholeBodyStateAbstract(unittest.TestCase):
 
         for i, name in enumerate(names):
             self.assertTrue(
-                np.allclose(pub.get_model_inertial_parameters(name),
-                            new_parameters[i], atol=1e-9),
-                "Wrong pub inerital parameters in body " + name + "\n" +
-                "desired:\n" + str(new_parameters[i]) +
-                "obtained:\n" + str(pub.get_model_inertial_parameters(name)),
+                np.allclose(
+                    pub.get_model_inertial_parameters(name),
+                    new_parameters[i],
+                    atol=1e-9,
+                ),
+                "Wrong pub inerital parameters in body "
+                + name
+                + "\n"
+                + "desired:\n"
+                + str(new_parameters[i])
+                + "obtained:\n"
+                + str(pub.get_model_inertial_parameters(name)),
             )
             self.assertTrue(
-                np.allclose(sub.get_model_inertial_parameters(name),
-                            new_parameters[i], atol=1e-9),
-                "Wrong sub inerital parameters in body " + name + "\n" +
-                "desired:\n" + str(new_parameters[i]) +
-                "obtained:\n" + str(pub.get_model_inertial_parameters(name)),
+                np.allclose(
+                    sub.get_model_inertial_parameters(name),
+                    new_parameters[i],
+                    atol=1e-9,
+                ),
+                "Wrong sub inerital parameters in body "
+                + name
+                + "\n"
+                + "desired:\n"
+                + str(new_parameters[i])
+                + "obtained:\n"
+                + str(pub.get_model_inertial_parameters(name)),
             )
 
 class SampleHumanoidTest(TestWholeBodyStateAbstract):

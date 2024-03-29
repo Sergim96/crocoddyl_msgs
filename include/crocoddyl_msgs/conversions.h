@@ -206,14 +206,14 @@ static inline void toMsg(Control &msg,
  * @param tau[in]    Joint effort
  */
 template <int Options, template <typename, int> class JointCollectionTpl>
-static inline void toMsg(
-    const pinocchio::ModelTpl<double, Options, JointCollectionTpl> &model,
-    pinocchio::DataTpl<double, Options, JointCollectionTpl> &data,
-    WholeBodyState &msg, const double t,
-    const Eigen::Ref<const Eigen::VectorXd> &q,
-    const Eigen::Ref<const Eigen::VectorXd> &v,
-    const Eigen::Ref<const Eigen::VectorXd> &a,
-    const Eigen::Ref<const Eigen::VectorXd> &tau) {
+static inline void
+toMsg(const pinocchio::ModelTpl<double, Options, JointCollectionTpl> &model,
+      pinocchio::DataTpl<double, Options, JointCollectionTpl> &data,
+      WholeBodyState &msg, const double t,
+      const Eigen::Ref<const Eigen::VectorXd> &q,
+      const Eigen::Ref<const Eigen::VectorXd> &v,
+      const Eigen::Ref<const Eigen::VectorXd> &a,
+      const Eigen::Ref<const Eigen::VectorXd> &tau) {
   if (q.size() != model.nq) {
     throw std::invalid_argument("Expected q to be " + std::to_string(model.nq) +
                                 " but received " + std::to_string(q.size()));
@@ -681,10 +681,10 @@ fromMsg(const pinocchio::ModelTpl<double, Options, JointCollectionTpl> &model,
  * @param reduced_model[in]  Reduced Pinocchio model
  * @param q_out[out]  Configuration vector (dimension: model.nq)
  * @param v_out[out]  Generalized velocity (dimension: model.nv)
-  * @param tau_out[out]  Joint effort (dimension: model.nv - nv_root)
+ * @param tau_out[out]  Joint effort (dimension: model.nv - nv_root)
  * @param q[in]  Reduced configuration vector (dimension: reduced_model.nq)
  * @param v[in]  Reduced generalized velocity (dimension: reduced_model.nv)
-  * @param tau[in]  Reduced joint effort (dimension: reduced_model.nv - nv_root)
+ * @param tau[in]  Reduced joint effort (dimension: reduced_model.nv - nv_root)
  * @param qref[in]  Reference configuration used in the reduced model
  * @param locked_joint_ids[in]  Ids of the locked joints
  */
@@ -741,7 +741,7 @@ static inline void fromReduced(
 
   q_out.head(nq_root) = q_in.head(nq_root);
   v_out.head(nv_root) = v_in.head(nv_root);
-    for (std::size_t j = root_joint_id + 1;
+  for (std::size_t j = root_joint_id + 1;
        j < static_cast<std::size_t>(reduced_model.njoints); ++j) {
     const std::string &name = reduced_model.names[j];
     JointModel joint = model.joints[model.getJointId(name)];
@@ -759,7 +759,8 @@ static inline void fromReduced(
 }
 
 /**
- * @brief Conversion from reduced position, velocity, acceleration and effort to a full one
+ * @brief Conversion from reduced position, velocity, acceleration and effort to
+ * a full one
  *
  * @param model[in]  Pinocchio model
  * @param reduced_model[in]  Reduced Pinocchio model
@@ -934,7 +935,8 @@ toReduced(const pinocchio::ModelTpl<double, Options, JointCollectionTpl> &model,
 }
 
 /**
- * @brief Conversion to reduced position, velocity, acceleration and effort from a full one
+ * @brief Conversion to reduced position, velocity, acceleration and effort from
+ * a full one
  *
  * @param model[in]  Pinocchio model
  * @param reduced_model[in]  Reduced Pinocchio model
@@ -954,7 +956,8 @@ toReduced(const pinocchio::ModelTpl<double, Options, JointCollectionTpl> &model,
           const pinocchio::ModelTpl<double, Options, JointCollectionTpl>
               &reduced_model,
           Eigen::Ref<Eigen::VectorXd> q_out, Eigen::Ref<Eigen::VectorXd> v_out,
-          Eigen::Ref<Eigen::VectorXd> a_out, Eigen::Ref<Eigen::VectorXd> tau_out,
+          Eigen::Ref<Eigen::VectorXd> a_out,
+          Eigen::Ref<Eigen::VectorXd> tau_out,
           const Eigen::Ref<const Eigen::VectorXd> &q_in,
           const Eigen::Ref<const Eigen::VectorXd> &v_in,
           const Eigen::Ref<const Eigen::VectorXd> &a_in,

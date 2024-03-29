@@ -24,38 +24,43 @@ typedef const crocoddyl_msgs::MultibodyInertialParameters::ConstPtr
 typedef Eigen::Matrix<double, 10, 1> Vector10d;
 namespace crocoddyl_msgs {
 
-
 class MultibodyInertialParametersRosSubscriber {
 public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-   /**
+  /**
    * @brief Initialize the multi-body inertial parameters subscriber.
    *
    * @param[in] topic     Topic name
    */
   MultibodyInertialParametersRosSubscriber(
-      const std::string &topic = "/crocoddyl/inertial_parameters"):
+      const std::string &topic = "/crocoddyl/inertial_parameters")
+      :
 #ifdef ROS2
       : node_(rclcpp::Node::make_shared("inertia_parameters_subscriber")),
         sub_(node_->create_subscription<MultibodyInertialParameters>(
             topic, 1,
             std::bind(&MultibodyInertialParametersRosSubscriber::callback, this,
                       std::placeholders::_1))),
-        has_new_msg_(false), is_processing_msg_(false), last_msg_time_(0.) {
+        has_new_msg_(false),
+        is_processing_msg_(false),
+        last_msg_time_(0.) {
     spinner_.add_node(node_);
     thread_ = std::thread([this]() { this->spin(); });
     thread_.detach();
     RCLCPP_INFO_STREAM(node_->get_logger(),
-                       "Subscribing MultibodyInertialParameters messages on " << topic);
-#else 
-      spinner_(2), has_new_msg_(false), is_processing_msg_(false), last_msg_time_(0.) {
+                       "Subscribing MultibodyInertialParameters messages on "
+                           << topic);
+#else
+        spinner_(2), has_new_msg_(false), is_processing_msg_(false),
+        last_msg_time_(0.) {
     ros::NodeHandle n;
     sub_ = n.subscribe<MultibodyInertialParameters>(
         topic, 1, &MultibodyInertialParametersRosSubscriber::callback, this,
         ros::TransportHints().tcpNoDelay());
     spinner_.start();
-    ROS_INFO_STREAM("Subscribing MultibodyInertialParameters messages on " << topic);
+    ROS_INFO_STREAM("Subscribing MultibodyInertialParameters messages on "
+                    << topic);
 #endif
   }
 
@@ -66,16 +71,15 @@ public:
    *
    * @return  A map from body names to inertial parameters.
    */
-  
-  std::map<std::string, Vector10d>
-  get_parameters() {
+
+  std::map<std::string, Vector10d> get_parameters() {
     // start processing the message
     is_processing_msg_ = true;
     std::lock_guard<std::mutex> guard(mutex_);
-    
+
     const std::size_t n_bodies = msg_.parameters.size();
-    for (std::size_t i = 0; i<n_bodies; ++i){
-      const std::string &name =  msg_.parameters[i].name;
+    for (std::size_t i = 0; i < n_bodies; ++i) {
+      const std::string &name = msg_.parameters[i].name;
       p_tmp_[0] = msg_.parameters[i].inertia.m;
       p_tmp_[1] = msg_.parameters[i].inertia.com.x;
       p_tmp_[2] = msg_.parameters[i].inertia.com.y;
@@ -105,14 +109,15 @@ private:
   rclcpp::executors::SingleThreadedExecutor spinner_;
   std::thread thread_;
   void spin() { spinner_.spin(); }
-  rclcpp::Subscription<MultibodyInertialParameters>::SharedPtr sub_; //!< ROS subscriber
+  rclcpp::Subscription<MultibodyInertialParameters>::SharedPtr
+      sub_; //!< ROS subscriber
 #else
   ros::NodeHandle node_;
   ros::AsyncSpinner spinner_;
   ros::Subscriber sub_; //!< ROS subscriber
 #endif
-  std::mutex mutex_;      ///< Mutex to prevent race condition on callback
-  MultibodyInertialParameters msg_;    //!< ROS message
+  std::mutex mutex_; ///< Mutex to prevent race condition on callback
+  MultibodyInertialParameters msg_; //!< ROS message
 
   bool has_new_msg_;       //!< Indcate when a new message has been received
   bool is_processing_msg_; //!< Indicate when we are processing the message

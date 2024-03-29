@@ -176,22 +176,27 @@ public:
   /**
    * @brief updates the inertial parameters of the pinocchio model
    *
-   * @param body_name[in] name of the desired body to update the inertial parameters
+   * @param body_name[in] name of the desired body to update the inertial
+   * parameters
    * @param psi[in]       Vector containing the inertial parameters
    */
-  void update_model_inertial_parameters(const std::string &body_name, const Eigen::Ref<const Eigen::VectorXd> &psi){
-    unsigned int id =  model_.getJointId(body_name);
+  void update_model_inertial_parameters(
+      const std::string &body_name,
+      const Eigen::Ref<const Eigen::VectorXd> &psi) {
+    unsigned int id = model_.getJointId(body_name);
     model_.inertias[id] = temp_Inertia_.FromDynamicParameters(psi);
   }
 
   /**
    * @brief returns the inertial parameters of the pinocchio model
    *
-   * @param body_name[in] name of the desired body to get the inertial parameters
+   * @param body_name[in] name of the desired body to get the inertial
+   * parameters
    * @return psi[in]       Vector containing the inertial parameters
    */
-  const Eigen::VectorXd get_model_inertial_parameters(const std::string &body_name){
-    unsigned int id =  model_.getJointId(body_name);
+  const Eigen::VectorXd
+  get_model_inertial_parameters(const std::string &body_name) {
+    unsigned int id = model_.getJointId(body_name);
     const Eigen::VectorXd psi = model_.inertias[id].toDynamicParameters();
     return psi;
   }
@@ -250,7 +255,10 @@ private:
       // Check the size of the reference configuration
       if (qref_.size() != model_.nq) {
 #ifdef ROS2
-        RCLCPP_ERROR_STREAM(node_->get_logger(), "Invalid argument: qref has wrong dimension (it should be " << std::to_string(model_.nq) << ")");
+        RCLCPP_ERROR_STREAM(
+            node_->get_logger(),
+            "Invalid argument: qref has wrong dimension (it should be "
+                << std::to_string(model_.nq) << ")");
 #else
         ROS_ERROR_STREAM(
             "Invalid argument: qref has wrong dimension (it should be "

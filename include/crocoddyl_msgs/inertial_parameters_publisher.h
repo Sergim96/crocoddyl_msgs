@@ -39,16 +39,15 @@ public:
     RCLCPP_INFO_STREAM(node_.get_logger(),
                        "Publishing MultibodyInertialParameters messages on "
                            << topic);
-        }
+  }
 #else
-      {
+  {
     ros::NodeHandle n;
     pub_.init(n, topic, 1);
     ROS_INFO_STREAM("Publishing MultibodyInertialParameters messages on "
                     << topic);
-      }
+  }
 #endif
-      
 
   ~MultibodyInertialParametersRosPublisher() = default;
 
@@ -58,21 +57,21 @@ public:
    * @param parameters[in]    multibody inertial parameters
    */
   void
-  publish(const std::map<std::string, const Eigen::Ref<const Eigen::VectorXd> > &parameters
-          ) {
+  publish(const std::map<std::string, const Eigen::Ref<const Eigen::VectorXd>>
+              &parameters) {
     const std::size_t n_bodies = parameters.size();
     pub_.msg_.parameters.resize(n_bodies);
 
     if (pub_.trylock()) {
       pub_.msg_.header.stamp = ros::Time::now();
       unsigned int i = 0;
-      for (const auto& [body_name, psi] : parameters){
+      for (const auto &[body_name, psi] : parameters) {
         if (psi.size() != 10)
-          throw std::invalid_argument(
-            "Dimension of psi for body " + body_name + " is not 10");
+          throw std::invalid_argument("Dimension of psi for body " + body_name +
+                                      " is not 10");
         pub_.msg_.parameters[i].name = body_name;
-        pub_.msg_.parameters[i].inertia.m = psi[0];      
-        pub_.msg_.parameters[i].inertia.com.x = psi[1]; 
+        pub_.msg_.parameters[i].inertia.m = psi[0];
+        pub_.msg_.parameters[i].inertia.com.x = psi[1];
         pub_.msg_.parameters[i].inertia.com.y = psi[2];
         pub_.msg_.parameters[i].inertia.com.z = psi[3];
         pub_.msg_.parameters[i].inertia.ixx = psi[4];

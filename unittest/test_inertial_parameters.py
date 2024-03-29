@@ -25,7 +25,7 @@ else:
 
 from crocoddyl_ros import (
     MultibodyInertialParametersRosPublisher,
-    MultibodyInertialParametersRosSubscriber
+    MultibodyInertialParametersRosSubscriber,
 )
 
 
@@ -48,15 +48,19 @@ class TestInertialParameters(unittest.TestCase):
         # publish the inertial parameters
         for i in range(model.nbodies):
             parameters[names[i]] = model.inertias[i].toDynamicParameters()
-            
+
         while True:
             pub.publish(parameters)
             if sub.has_new_msg():
                 break
-        
+
         _parameters = sub.get_parameters()
         for i in range(model.nbodies):
-            self.assertTrue(np.allclose(_parameters[names[i]], parameters[names[i]], atol=1e-9), "Wrong parameters in " + names[i])
+            self.assertTrue(
+                np.allclose(_parameters[names[i]], parameters[names[i]], atol=1e-9),
+                "Wrong parameters in " + names[i],
+            )
+
 
 if __name__ == "__main__":
     if ROS_VERSION == 2:

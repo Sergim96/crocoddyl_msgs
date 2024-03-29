@@ -100,8 +100,8 @@ public:
             topic, 1, &WholeBodyTrajectoryRosSubscriber::callback, this,
             ros::TransportHints().tcpNoDelay())),
         has_new_msg_(false), is_processing_msg_(false), last_msg_time_(0.),
-        odom_frame_(frame), model_(model), data_(model),
-        a_(model.nv), qref_(qref), is_reduced_model_(true) {
+        odom_frame_(frame), model_(model), data_(model), a_(model.nv),
+        qref_(qref), is_reduced_model_(true) {
     ROS_INFO_STREAM("Subscribing WholeBodyTrajectory messages on " << topic);
 #endif
     init(locked_joints);
@@ -259,7 +259,10 @@ private:
       // Check the size of the reference configuration
       if (qref_.size() != model_.nq) {
 #ifdef ROS2
-        RCLCPP_ERROR_STREAM(node_->get_logger(), "Invalid argument: qref has wrong dimension (it should be " << std::to_string(model_.nq) << ")");
+        RCLCPP_ERROR_STREAM(
+            node_->get_logger(),
+            "Invalid argument: qref has wrong dimension (it should be "
+                << std::to_string(model_.nq) << ")");
 #else
         ROS_ERROR_STREAM(
             "Invalid argument: qref has wrong dimension (it should be "
