@@ -1,7 +1,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 // BSD 3-Clause License
 //
-// Copyright (C) 2020-2023, Heriot-Watt University, University of Oxford
+// Copyright (C) 2020-2024, Heriot-Watt University, University of Oxford
 // Copyright note valid unless otherwise stated in individual files.
 // All rights reserved.
 ///////////////////////////////////////////////////////////////////////////////
@@ -31,7 +31,7 @@ public:
   /**
    * @brief Initialize the multi-body inertial parameters subscriber.
    *
-   * @param[in] topic     Topic name
+   * @param[in] topic  Topic name (default: "/crocoddyl/inertial_parameters")
    */
   MultibodyInertialParametersRosSubscriber(
       const std::string &topic = "/crocoddyl/inertial_parameters")
@@ -69,7 +69,12 @@ public:
   /**
    * @brief Get the latest inertial parameters
    *
-   * @return  A map from body names to inertial parameters.
+   * @return  A map from body names to inertial parameters. The inertial
+   * parameters vector is defined as [m, h_x, h_y, h_z, I_{xx}, I_{xy}, I_{yy},
+   * I_{xz}, I_{yz}, I_{zz}]^T, where h=mc is the first moment of inertial m*COM
+   * and I has its origin in the frame, I = I_C + mS^T(c)S(c) and I_C has its
+   * origin at the barycenter
+   *
    */
 
   std::map<std::string, Vector10d> get_parameters() {
@@ -79,18 +84,17 @@ public:
 
     const std::size_t n_bodies = msg_.parameters.size();
     for (std::size_t i = 0; i < n_bodies; ++i) {
-      const std::string &name = msg_.parameters[i].name;
-      p_tmp_[0] = msg_.parameters[i].inertia.m;
-      p_tmp_[1] = msg_.parameters[i].inertia.com.x;
-      p_tmp_[2] = msg_.parameters[i].inertia.com.y;
-      p_tmp_[3] = msg_.parameters[i].inertia.com.z;
-      p_tmp_[4] = msg_.parameters[i].inertia.ixx;
-      p_tmp_[5] = msg_.parameters[i].inertia.ixy;
-      p_tmp_[6] = msg_.parameters[i].inertia.iyy;
-      p_tmp_[7] = msg_.parameters[i].inertia.ixz;
-      p_tmp_[8] = msg_.parameters[i].inertia.iyz;
-      p_tmp_[9] = msg_.parameters[i].inertia.izz;
-      parameters_[msg_.parameters[i].name] = p_tmp_;
+      psi_tmp_[0] = msg_.parameters[i].inertia.m;
+      psi_tmp_[1] = msg_.parameters[i].inertia.com.x * psi_tmp_[0];
+      psi_tmp_[2] = msg_.parameters[i].inertia.com.y * psi_tmp_[0];
+      psi_tmp_[3] = msg_.parameters[i].inertia.com.z * psi_tmp_[0];
+      psi_tmp_[4] = msg_.parameters[i].inertia.ixx;
+      psi_tmp_[5] = msg_.parameters[i].inertia.ixy;
+      psi_tmp_[6] = msg_.parameters[i].inertia.iyy;
+      psi_tmp_[7] = msg_.parameters[i].inertia.ixz;
+      psi_tmp_[8] = msg_.parameters[i].inertia.iyz;
+      psi_tmp_[9] = msg_.parameters[i].inertia.izz;
+      parameters_[msg_.parameters[i].name] = psi_tmp_;
     }
     // finish processing the message
     is_processing_msg_ = false;
@@ -123,7 +127,7 @@ private:
   bool is_processing_msg_; //!< Indicate when we are processing the message
   double last_msg_time_;
 
-  Vector10d p_tmp_;
+  Vector10d psi_tmp_;
   std::map<std::string, Vector10d> parameters_;
 
   void callback(MultibodyInertialParametersSharedPtr msg) {

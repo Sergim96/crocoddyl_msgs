@@ -745,7 +745,8 @@ static inline void fromReduced(
        j < static_cast<std::size_t>(reduced_model.njoints); ++j) {
     const std::string &name = reduced_model.names[j];
     const JointModel joint = model.joints[model.getJointId(name)];
-    const JointModel reduced_joint = model.joints[reduced_model.getJointId(name)];
+    const JointModel reduced_joint =
+        model.joints[reduced_model.getJointId(name)];
     q_out(joint.idx_q()) = q_in(reduced_joint.idx_q());
     v_out(joint.idx_v()) = v_in(reduced_joint.idx_v());
     tau_out(joint.idx_v() - nv_root) = tau_in(reduced_joint.idx_v() - nv_root);
@@ -844,7 +845,8 @@ static inline void fromReduced(
        j < static_cast<std::size_t>(reduced_model.njoints); ++j) {
     const std::string &name = reduced_model.names[j];
     const JointModel joint = model.joints[model.getJointId(name)];
-    const JointModel reduced_joint = model.joints[reduced_model.getJointId(name)];
+    const JointModel reduced_joint =
+        model.joints[reduced_model.getJointId(name)];
     q_out(joint.idx_q()) = q_in(reduced_joint.idx_q());
     v_out(joint.idx_v()) = v_in(reduced_joint.idx_v());
     a_out(joint.idx_v()) = a_in(reduced_joint.idx_v());
@@ -927,7 +929,8 @@ toReduced(const pinocchio::ModelTpl<double, Options, JointCollectionTpl> &model,
        j < static_cast<std::size_t>(reduced_model.njoints); ++j) {
     const std::string &name = reduced_model.names[j];
     const JointModel joint = model.joints[model.getJointId(name)];
-    const JointModel reduced_joint = model.joints[reduced_model.getJointId(name)];
+    const JointModel reduced_joint =
+        model.joints[reduced_model.getJointId(name)];
     q_out(reduced_joint.idx_q()) = q_in(joint.idx_q());
     v_out(reduced_joint.idx_v()) = v_in(joint.idx_v());
     tau_out(reduced_joint.idx_v() - nv_root) = tau_in(joint.idx_v() - nv_root);
@@ -1016,7 +1019,8 @@ toReduced(const pinocchio::ModelTpl<double, Options, JointCollectionTpl> &model,
        j < static_cast<std::size_t>(reduced_model.njoints); ++j) {
     const std::string &name = reduced_model.names[j];
     const JointModel joint = model.joints[model.getJointId(name)];
-    const JointModel reduced_joint = model.joints[reduced_model.getJointId(name)];
+    const JointModel reduced_joint =
+        model.joints[reduced_model.getJointId(name)];
     q_out(reduced_joint.idx_q()) = q_in(joint.idx_q());
     v_out(reduced_joint.idx_v()) = v_in(joint.idx_v());
     a_out(reduced_joint.idx_v()) = a_in(joint.idx_v());

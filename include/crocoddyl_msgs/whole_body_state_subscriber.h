@@ -179,12 +179,16 @@ public:
    * @param body_name[in] name of the desired body to update the inertial
    * parameters
    * @param psi[in]       Vector containing the inertial parameters
+   * The inertial parameters vector is defined as [m, h_x, h_y, h_z,
+   * I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, I_{zz}]^T, where h=mc is
+   * the first moment of inertial m*COM and I has its origin in the
+   * frame, I = I_C + mS^T(c)S(c) and I_C has its origin at the barycenter
    */
-  void update_model_inertial_parameters(
+  void update_body_inertial_parameters(
       const std::string &body_name,
       const Eigen::Ref<const Eigen::VectorXd> &psi) {
     unsigned int id = model_.getJointId(body_name);
-    model_.inertias[id] = temp_Inertia_.FromDynamicParameters(psi);
+    model_.inertias[id] = inertia_tmp_.FromDynamicParameters(psi);
   }
 
   /**
@@ -193,12 +197,15 @@ public:
    * @param body_name[in] name of the desired body to get the inertial
    * parameters
    * @return psi[in]       Vector containing the inertial parameters
+   * The inertial parameters vector is defined as [m, h_x, h_y, h_z,
+   * I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, I_{zz}]^T, where h=mc is
+   * the first moment of inertial m*COM and I has its origin in the
+   * frame, I = I_C + mS^T(c)S(c) and I_C has its origin at the barycenter
    */
   const Eigen::VectorXd
-  get_model_inertial_parameters(const std::string &body_name) {
+  get_body_inertial_parameters(const std::string &body_name) const {
     unsigned int id = model_.getJointId(body_name);
-    const Eigen::VectorXd psi = model_.inertias[id].toDynamicParameters();
-    return psi;
+    return model_.inertias[id].toDynamicParameters();
   }
 
 private:
@@ -247,7 +254,7 @@ private:
   std::map<std::string, Eigen::VectorXd> pd_tmp_;
   std::map<std::string, std::tuple<Eigen::VectorXd, ContactType, ContactStatus>>
       f_tmp_;
-  pinocchio::Inertia temp_Inertia_;
+  pinocchio::Inertia inertia_tmp_;
 
   void init(const std::vector<std::string> &locked_joints = DEFAULT_VECTOR) {
     const std::size_t nv_root = getRootNv(model_);

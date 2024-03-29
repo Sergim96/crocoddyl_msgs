@@ -285,13 +285,13 @@ class TestWholeBodyStateAbstract(unittest.TestCase):
         for name in names:
             psi = pinocchio.Inertia().Random().toDynamicParameters()
             new_parameters.append(psi)
-            pub.update_model_inertial_parameters(name, psi)
-            sub.update_model_inertial_parameters(name, psi)
+            pub.update_body_inertial_parameters(name, psi)
+            sub.update_body_inertial_parameters(name, psi)
 
         for i, name in enumerate(names):
             self.assertTrue(
                 np.allclose(
-                    pub.get_model_inertial_parameters(name),
+                    pub.get_body_inertial_parameters(name),
                     new_parameters[i],
                     atol=1e-9,
                 ),
@@ -301,11 +301,11 @@ class TestWholeBodyStateAbstract(unittest.TestCase):
                 + "desired:\n"
                 + str(new_parameters[i])
                 + "obtained:\n"
-                + str(pub.get_model_inertial_parameters(name)),
+                + str(pub.get_body_inertial_parameters(name)),
             )
             self.assertTrue(
                 np.allclose(
-                    sub.get_model_inertial_parameters(name),
+                    sub.get_body_inertial_parameters(name),
                     new_parameters[i],
                     atol=1e-9,
                 ),
@@ -315,7 +315,7 @@ class TestWholeBodyStateAbstract(unittest.TestCase):
                 + "desired:\n"
                 + str(new_parameters[i])
                 + "obtained:\n"
-                + str(pub.get_model_inertial_parameters(name)),
+                + str(pub.get_body_inertial_parameters(name)),
             )
 
 class SampleHumanoidTest(TestWholeBodyStateAbstract):

@@ -183,7 +183,7 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
            ":param s: contact surface and friction coefficient",
            py::arg("t"), py::arg("q"), py::arg("v"), py::arg("tau"),
            py::arg("p") = DEFAULT_SE3, py::arg("pd") = DEFAULT_MOTION,
-           py::arg("f") = DEFAULT_FORCE, py::arg("s") = DEFAULT_FORCE)
+           py::arg("f") = DEFAULT_FORCE, py::arg("s") = DEFAULT_FRICTION)
       .def("publish",
            static_cast<void (WholeBodyStateRosPublisher::*)(
                const double, const Eigen::Ref<const Eigen::VectorXd> &,
@@ -201,7 +201,7 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
            ":param t: time in secs\n"
            ":param q: configuration vector (dimension: model.nq)\n"
            ":param v: generalized velocity (dimension: model.nv)\n"
-           ":param v: generalized acceleration (dimension: model.nv)\n"
+           ":param a: generalized acceleration (dimension: model.nv)\n"
            ":param tau: joint effort\n"
            ":param p: contact position\n"
            ":param pd: contact velocity\n"
@@ -210,16 +210,21 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
            py::arg("t"), py::arg("q"), py::arg("v"), py::arg("a"),
            py::arg("tau"), py::arg("p") = DEFAULT_SE3,
            py::arg("pd") = DEFAULT_MOTION, py::arg("f") = DEFAULT_FORCE,
-           py::arg("s") = DEFAULT_FORCE)
-      .def("update_model_inertial_parameters",
-           &WholeBodyStateRosPublisher::update_model_inertial_parameters,
+           py::arg("s") = DEFAULT_FRICTION)
+      .def("update_body_inertial_parameters",
+           &WholeBodyStateRosPublisher::update_body_inertial_parameters,
            "Update the inertial parameters of the pinocchio model.\n\n"
            ":param body_name: name of the desired body to update the inertial "
            "parameters\n"
-           ":param psi: Vector containing the inertial parameters\n",
+           ":param psi: Vector containing the inertial parameters\n"
+           "The inertial parameters vector is defined as: \n"
+           "[m, h_x, h_y, h_z, I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, "
+           "I_{zz}]^T,\n where h=mc is the first moment of inertial"
+           "m*COM \n and I has its origin in the frame, \n I = I_C "
+           "+ mS^T(c)S(c) and I_C has its origin at the barycenter\n",
            py::arg("body_name"), py::arg("psi"))
-      .def("get_model_inertial_parameters",
-           &WholeBodyStateRosPublisher::get_model_inertial_parameters,
+      .def("get_body_inertial_parameters",
+           &WholeBodyStateRosPublisher::get_body_inertial_parameters,
            "Returns the inertial parameters of the pinocchio model.\n\n"
            ":param body_name: name of the desired body to get the inertial "
            "parameters\n"
@@ -248,16 +253,21 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
            "(wrench, type and status), and contact surface (norm and friction\n"
            "coefficient).")
       .def("has_new_msg", &WholeBodyStateRosSubscriber::has_new_msg)
-      .def("update_model_inertial_parameters",
-           &WholeBodyStateRosSubscriber::update_model_inertial_parameters,
-           "Update the inertial parameters of the pinocchio model.\n\n"
+      .def("update_body_inertial_parameters",
+           &WholeBodyStateRosSubscriber::update_body_inertial_parameters,
+           "Update the inertial parameters a given body.\n\n"
            ":param body_name: name of the desired body to update the inertial "
            "parameters\n"
-           ":param psi: Vector containing the inertial parameters\n",
+           ":param psi: Vector containing the inertial parameters\n"
+           "The inertial parameters vector is defined as: \n"
+           "[m, h_x, h_y, h_z, I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, "
+           "I_{zz}]^T,\n where h=mc is the first moment of inertial"
+           "m*COM \n and I has its origin in the frame, \n I = I_C "
+           "+ mS^T(c)S(c) and I_C has its origin at the barycenter\n",
            py::arg("body_name"), py::arg("psi"))
-      .def("get_model_inertial_parameters",
-           &WholeBodyStateRosSubscriber::get_model_inertial_parameters,
-           "Returns the inertial parameters of the pinocchio model.\n\n"
+      .def("get_body_inertial_parameters",
+           &WholeBodyStateRosSubscriber::get_body_inertial_parameters,
+           "Return the inertial parameters of a given body.\n\n"
            ":param body_name: name of the desired body to get the inertial "
            "parameters\n"
            ":return psi: Vector containing the inertial parameters\n",
@@ -325,7 +335,12 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
            py::arg("topic") = "/crocoddyl/inertial_parameters")
       .def("publish", &MultibodyInertialParametersRosPublisher::publish,
            "Publish a multibody inertia ROS message.\n\n"
-           ":param parameters: multibody inertial parameters",
+           ":param parameters: multibody inertial parameters\n"
+           "The inertial parameters vector is defined as: \n"
+           "[m, h_x, h_y, h_z, I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, "
+           "I_{zz}]^T,\n where h=mc is the first moment of inertial"
+           "m*COM \n and I has its origin in the frame, \n I = I_C "
+           "+ mS^T(c)S(c) and I_C has its origin at the barycenter\n",
            py::arg("parameters"));
 
   py::class_<
@@ -337,7 +352,12 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
       .def("get_parameters",
            &MultibodyInertialParametersRosSubscriber::get_parameters,
            "Get the latest multibody inertial parameters.\n\n"
-           ":return: dictionary of body names and inertial parameters pair\n")
+           ":return: dictionary of body names and inertial parameters pair\n"
+           "The inertial parameters vector is defined as: \n"
+           "[m, h_x, h_y, h_z, I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, "
+           "I_{zz}]^T,\n where h=mc is the first moment of inertial"
+           "m*COM \n and I has its origin in the frame, \n I = I_C "
+           "+ mS^T(c)S(c) and I_C has its origin at the barycenter\n")
       .def("has_new_msg",
            &MultibodyInertialParametersRosSubscriber::has_new_msg);
 
