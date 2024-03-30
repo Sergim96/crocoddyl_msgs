@@ -46,7 +46,9 @@ class TestInertialParameters(unittest.TestCase):
         parameters = {}
         names = model.names.tolist()
         # publish the inertial parameters
-        for i in range(model.nbodies):
+        # note: we have to skip the first body as it is the "universe" one and it is
+        # initialized with mass=0, leading to a division by 0
+        for i in range(1, model.nbodies):
             parameters[names[i]] = model.inertias[i].toDynamicParameters()
 
         while True:
@@ -55,10 +57,12 @@ class TestInertialParameters(unittest.TestCase):
                 break
 
         _parameters = sub.get_parameters()
-        for i in range(model.nbodies):
+        for i in range(1, model.nbodies):
             self.assertTrue(
                 np.allclose(_parameters[names[i]], parameters[names[i]], atol=1e-9),
-                "Wrong parameters in " + names[i],
+                "Wrong parameters in " + names[i] + "\n"+
+                "Published parameters:\n"+str(parameters[names[i]])  + "\n"+
+                "Subscribed parameters:\n"+str(_parameters[names[i]]),
             )
 
 
