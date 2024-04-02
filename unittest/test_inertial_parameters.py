@@ -60,9 +60,14 @@ class TestInertialParameters(unittest.TestCase):
         for i in range(1, model.nbodies):
             self.assertTrue(
                 np.allclose(_parameters[names[i]], parameters[names[i]], atol=1e-9),
-                "Wrong parameters in " + names[i] + "\n"+
-                "Published parameters:\n"+str(parameters[names[i]])  + "\n"+
-                "Subscribed parameters:\n"+str(_parameters[names[i]]),
+                "Wrong parameters in "
+                + names[i]
+                + "\n"
+                + "Published parameters:\n"
+                + str(parameters[names[i]])
+                + "\n"
+                + "Subscribed parameters:\n"
+                + str(_parameters[names[i]]),
             )
 
 

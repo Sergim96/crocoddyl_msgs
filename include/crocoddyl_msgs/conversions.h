@@ -31,6 +31,7 @@
 #ifdef ROS2
 #include "crocoddyl_msgs/msg/control.hpp"
 #include "crocoddyl_msgs/msg/feedback_gain.hpp"
+#include "crocoddyl_msgs/msg/multibody_inertial_parameters.hpp"
 #include "crocoddyl_msgs/msg/state.hpp"
 #include "crocoddyl_msgs/msg/time_interval.hpp"
 #include <whole_body_state_msgs/msg/whole_body_state.hpp>
@@ -38,6 +39,7 @@
 #else
 #include "crocoddyl_msgs/Control.h"
 #include "crocoddyl_msgs/FeedbackGain.h"
+#include "crocoddyl_msgs/MultibodyInertialParameters.h"
 #include "crocoddyl_msgs/State.h"
 #include "crocoddyl_msgs/TimeInterval.h"
 #include <whole_body_state_msgs/WholeBodyState.h>
@@ -61,6 +63,8 @@ typedef crocoddyl_msgs::msg::TimeInterval TimeInterval;
 typedef crocoddyl_msgs::msg::State State;
 typedef crocoddyl_msgs::msg::Control Control;
 typedef crocoddyl_msgs::msg::FeedbackGain FeedbackGain;
+typedef crocoddyl_msgs::msg::MultibodyInertialParameters
+    MultibodyInertialParameters;
 typedef whole_body_state_msgs::msg::WholeBodyState WholeBodyState;
 typedef whole_body_state_msgs::msg::WholeBodyTrajectory WholeBodyTrajectory;
 typedef whole_body_state_msgs::msg::ContactState ContactState;
@@ -69,6 +73,7 @@ typedef crocoddyl_msgs::TimeInterval TimeInterval;
 typedef crocoddyl_msgs::State State;
 typedef crocoddyl_msgs::Control Control;
 typedef crocoddyl_msgs::FeedbackGain FeedbackGain;
+typedef crocoddyl_msgs::MultibodyInertialParameters MultibodyInertialParameters;
 typedef whole_body_state_msgs::WholeBodyState WholeBodyState;
 typedef whole_body_state_msgs::WholeBodyTrajectory WholeBodyTrajectory;
 typedef whole_body_state_msgs::ContactState ContactState;

@@ -6,7 +6,7 @@
 #
 # The header specifies the time at which the state is published.
 
-Header header
+std_msgs/Header header
 
 # The inertia of multiple bodies
 crocoddyl_msgs/InertialParameters[] parameters

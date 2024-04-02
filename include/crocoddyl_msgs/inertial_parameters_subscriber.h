@@ -9,8 +9,6 @@
 #ifndef CROCODDYL_MSG_MULTIBODY_INERTIAL_PARAMETERS_SUBSCRIBER_H_
 #define CROCODDYL_MSG_MULTIBODY_INERTIAL_PARAMETERS_SUBSCRIBER_H_
 
-#include "crocoddyl_msgs/MultibodyInertialParameters.h"
-
 #include <mutex>
 #ifdef ROS2
 #include <rclcpp/rclcpp.hpp>
@@ -18,11 +16,19 @@
 #include <ros/node_handle.h>
 #endif
 
-typedef crocoddyl_msgs::MultibodyInertialParameters MultibodyInertialParameters;
+#include "crocoddyl_msgs/conversions.h"
+
+namespace crocoddyl_msgs {
+
+#ifdef ROS2
+typedef const crocoddyl_msgs::msg::MultibodyInertialParameters::SharedPtr
+    MultibodyInertialParametersSharedPtr;
+#else
 typedef const crocoddyl_msgs::MultibodyInertialParameters::ConstPtr
     &MultibodyInertialParametersSharedPtr;
+#endif
+
 typedef Eigen::Matrix<double, 10, 1> Vector10d;
-namespace crocoddyl_msgs {
 
 class MultibodyInertialParametersRosSubscriber {
 public:
@@ -35,16 +41,13 @@ public:
    */
   MultibodyInertialParametersRosSubscriber(
       const std::string &topic = "/crocoddyl/inertial_parameters")
-      :
 #ifdef ROS2
       : node_(rclcpp::Node::make_shared("inertia_parameters_subscriber")),
         sub_(node_->create_subscription<MultibodyInertialParameters>(
             topic, 1,
             std::bind(&MultibodyInertialParametersRosSubscriber::callback, this,
                       std::placeholders::_1))),
-        has_new_msg_(false),
-        is_processing_msg_(false),
-        last_msg_time_(0.) {
+        has_new_msg_(false), is_processing_msg_(false), last_msg_time_(0.) {
     spinner_.add_node(node_);
     thread_ = std::thread([this]() { this->spin(); });
     thread_.detach();
@@ -52,7 +55,7 @@ public:
                        "Subscribing MultibodyInertialParameters messages on "
                            << topic);
 #else
-        spinner_(2), has_new_msg_(false), is_processing_msg_(false),
+      : spinner_(2), has_new_msg_(false), is_processing_msg_(false),
         last_msg_time_(0.) {
     ros::NodeHandle n;
     sub_ = n.subscribe<MultibodyInertialParameters>(

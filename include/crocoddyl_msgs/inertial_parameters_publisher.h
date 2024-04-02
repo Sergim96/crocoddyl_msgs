@@ -9,16 +9,15 @@
 #ifndef CROCODDYL_MSG_MULTIBODY_INERTIAL_PARAMETERS_PUBLISHER_H_
 #define CROCODDYL_MSG_MULTIBODY_INERTIAL_PARAMETERS_PUBLISHER_H_
 
-#include <realtime_tools/realtime_publisher.h>
-
 #ifdef ROS2
 #include <rclcpp/rclcpp.hpp>
 #else
 #include <ros/node_handle.h>
 #endif
-#include "crocoddyl_msgs/MultibodyInertialParameters.h"
 
-typedef crocoddyl_msgs::MultibodyInertialParameters MultibodyInertialParameters;
+#include "crocoddyl_msgs/conversions.h"
+
+#include <realtime_tools/realtime_publisher.h>
 
 namespace crocoddyl_msgs {
 
@@ -55,8 +54,10 @@ public:
    * @brief Publish a multi-body inertial parameters ROS message.
    *
    * @param parameters[in]    multibody inertial parameters. The inertial
-   * parameters vector is defined as [m, h_x, h_y, h_z, I_{xx}, I_{xy}, I_{yy},
-   * I_{xz}, I_{yz}, I_{zz}]^T, where h=mc is the first moment of inertial m*COM
+   * parameters vector is defined as [m, h_x, h_y, h_z, I_{xx}, I_{xy},
+   I_{yy},
+   * I_{xz}, I_{yz}, I_{zz}]^T, where h=mc is the first moment of inertial
+   m*COM
    * and I has its origin in the frame, I = I_C + mS^T(c)S(c) and I_C has its
    * origin at the barycenter
    */
@@ -66,7 +67,11 @@ public:
     pub_.msg_.parameters.resize(n_bodies);
 
     if (pub_.trylock()) {
+#ifdef ROS2
+      pub_.msg_.header.stamp = node_.now();
+#else
       pub_.msg_.header.stamp = ros::Time::now();
+#endif
       unsigned int i = 0;
       for (const auto &[body_name, psi] : parameters) {
         pub_.msg_.parameters[i].name = body_name;
@@ -87,6 +92,9 @@ public:
   }
 
 private:
+#ifdef ROS2
+  rclcpp::Node node_;
+#endif
   realtime_tools::RealtimePublisher<MultibodyInertialParameters> pub_;
 };
 
