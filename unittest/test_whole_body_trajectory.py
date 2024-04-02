@@ -330,6 +330,50 @@ class TestWholeBodyTrajectoryAbstract(unittest.TestCase):
                     "Wrong contact friction coefficient at " + name + ", " + str(i),
                 )
 
+    def test_update_model(self):
+        model = pinocchio.buildSampleModelHumanoid()
+        sub = WholeBodyTrajectoryRosSubscriber(model, "whole_body_trajectory")
+        pub = WholeBodyTrajectoryRosPublisher(model, "whole_body_trajectory")
+        time.sleep(1)
+        # publish whole-body state messages
+        names = model.names.tolist()
+        new_parameters = []
+        for name in names:
+            psi = pinocchio.Inertia().Random().toDynamicParameters()
+            new_parameters.append(psi)
+            pub.update_body_inertial_parameters(name, psi)
+            sub.update_body_inertial_parameters(name, psi)
+
+        for i, name in enumerate(names):
+            self.assertTrue(
+                np.allclose(
+                    pub.get_body_inertial_parameters(name),
+                    new_parameters[i],
+                    atol=1e-9,
+                ),
+                "Wrong pub inerital parameters in body "
+                + name
+                + "\n"
+                + "desired:\n"
+                + str(new_parameters[i])
+                + "obtained:\n"
+                + str(pub.get_body_inertial_parameters(name)),
+            )
+            self.assertTrue(
+                np.allclose(
+                    sub.get_body_inertial_parameters(name),
+                    new_parameters[i],
+                    atol=1e-9,
+                ),
+                "Wrong sub inerital parameters in body "
+                + name
+                + "\n"
+                + "desired:\n"
+                + str(new_parameters[i])
+                + "obtained:\n"
+                + str(pub.get_body_inertial_parameters(name)),
+            )
+
 class SampleHumanoidTest(TestWholeBodyTrajectoryAbstract):
     MODEL = pinocchio.buildSampleModelHumanoid()
     LOCKED_JOINTS = ["larm_elbow_joint", "rarm_elbow_joint"]

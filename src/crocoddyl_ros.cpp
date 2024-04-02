@@ -301,7 +301,26 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
            py::arg("ps") = DEFAULT_SE3_VECTOR,
            py::arg("pds") = DEFAULT_MOTION_VECTOR,
            py::arg("fs") = DEFAULT_FORCE_VECTOR,
-           py::arg("ss") = DEFAULT_FRICTION_VECTOR);
+           py::arg("ss") = DEFAULT_FRICTION_VECTOR)
+      .def("update_body_inertial_parameters",
+           &WholeBodyTrajectoryRosPublisher::update_body_inertial_parameters,
+           "Update the inertial parameters a given body.\n\n"
+           ":param body_name: name of the desired body to update the inertial "
+           "parameters\n"
+           ":param psi: Vector containing the inertial parameters\n"
+           "The inertial parameters vector is defined as: \n"
+           "[m, h_x, h_y, h_z, I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, "
+           "I_{zz}]^T,\n where h=mc is the first moment of inertial"
+           "m*COM \n and I has its origin in the frame, \n I = I_C "
+           "+ mS^T(c)S(c) and I_C has its origin at the barycenter\n",
+           py::arg("body_name"), py::arg("psi"))
+      .def("get_body_inertial_parameters",
+           &WholeBodyTrajectoryRosPublisher::get_body_inertial_parameters,
+           "Return the inertial parameters of a given body.\n\n"
+           ":param body_name: name of the desired body to get the inertial "
+           "parameters\n"
+           ":return psi: Vector containing the inertial parameters\n",
+           py::arg("body_name"));
 
   py::class_<WholeBodyTrajectoryRosSubscriber,
              std::unique_ptr<WholeBodyTrajectoryRosSubscriber, py::nodelete>>(
@@ -325,7 +344,26 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
            "contact forces, types and statuses, and contact surfaces and "
            "friction\n"
            "coefficients.")
-      .def("has_new_msg", &WholeBodyTrajectoryRosSubscriber::has_new_msg);
+      .def("has_new_msg", &WholeBodyTrajectoryRosSubscriber::has_new_msg)
+      .def("update_body_inertial_parameters",
+           &WholeBodyTrajectoryRosSubscriber::update_body_inertial_parameters,
+           "Update the inertial parameters a given body.\n\n"
+           ":param body_name: name of the desired body to update the inertial "
+           "parameters\n"
+           ":param psi: Vector containing the inertial parameters\n"
+           "The inertial parameters vector is defined as: \n"
+           "[m, h_x, h_y, h_z, I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, "
+           "I_{zz}]^T,\n where h=mc is the first moment of inertial"
+           "m*COM \n and I has its origin in the frame, \n I = I_C "
+           "+ mS^T(c)S(c) and I_C has its origin at the barycenter\n",
+           py::arg("body_name"), py::arg("psi"))
+      .def("get_body_inertial_parameters",
+           &WholeBodyTrajectoryRosSubscriber::get_body_inertial_parameters,
+           "Return the inertial parameters of a given body.\n\n"
+           ":param body_name: name of the desired body to get the inertial "
+           "parameters\n"
+           ":return psi: Vector containing the inertial parameters\n",
+           py::arg("body_name"));
 
   py::class_<
       MultibodyInertialParametersRosPublisher,
