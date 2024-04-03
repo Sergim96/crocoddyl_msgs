@@ -9,15 +9,15 @@
 #ifndef CROCODDYL_MSG_MULTIBODY_INERTIAL_PARAMETERS_PUBLISHER_H_
 #define CROCODDYL_MSG_MULTIBODY_INERTIAL_PARAMETERS_PUBLISHER_H_
 
+#include "crocoddyl_msgs/conversions.h"
+
+#include <realtime_tools/realtime_publisher.h>
+
 #ifdef ROS2
 #include <rclcpp/rclcpp.hpp>
 #else
 #include <ros/node_handle.h>
 #endif
-
-#include "crocoddyl_msgs/conversions.h"
-
-#include <realtime_tools/realtime_publisher.h>
 
 namespace crocoddyl_msgs {
 
