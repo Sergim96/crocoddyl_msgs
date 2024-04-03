@@ -254,8 +254,7 @@ private:
     spinner_.start();
 #endif
 
-    const std::size_t root_joint_id = getRootJointId(model_);
-    const std::size_t nv_root = model_.frames[root_joint_id].name != "universe" ? model_.joints[root_joint_id].nv() : 0;
+    const std::size_t nv_root = getRootDim(model_);
     if (locked_joints.size() != 0) {
       // Check the size of the reference configuration
       if (qref_.size() != model_.nq) {

@@ -90,6 +90,18 @@ static inline std::size_t getRootJointId(
 }
 
 /**
+ * @brief Return the root dimension
+ *
+ * @param return  Root joint dimension
+ */
+template <int Options, template <typename, int> class JointCollectionTpl>
+static inline std::size_t getRootDim(
+  const pinocchio::ModelTpl<double, Options, JointCollectionTpl> &model) {
+  const std::size_t root_joint_id = getRootJointId(model);
+  return model.frames[root_joint_id].name != "universe" ? model.joints[root_joint_id].nv() : 0;
+}
+
+/**
  * @brief Conversion of Eigen to message for a given
  * crocoddyl_msgs::FeedbackGain message reference
  *
