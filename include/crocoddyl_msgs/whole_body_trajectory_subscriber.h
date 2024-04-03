@@ -1,7 +1,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 // BSD 3-Clause License
 //
-// Copyright (C) 2023-2023, Heriot-Watt University
+// Copyright (C) 2023-2024, Heriot-Watt University
 // Copyright note valid unless otherwise stated in individual files.
 // All rights reserved.
 ///////////////////////////////////////////////////////////////////////////////
@@ -255,7 +255,7 @@ private:
 #endif
 
     const std::size_t root_joint_id = getRootJointId(model_);
-    const std::size_t nv_root = model_.joints[root_joint_id].nv();
+    const std::size_t nv_root = model_.frames[root_joint_id].name != "universe" ? model_.joints[root_joint_id].nv() : 0;
     if (locked_joints.size() != 0) {
       // Check the size of the reference configuration
       if (qref_.size() != model_.nq) {

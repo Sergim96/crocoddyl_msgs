@@ -840,10 +840,10 @@ toReduced_return(
     const Eigen::Ref<const Eigen::VectorXd> &v_in,
     const Eigen::Ref<const Eigen::VectorXd> &tau_in) {
   const std::size_t root_joint_id = getRootJointId(model);
+  const std::size_t nv_root = model.frames[root_joint_id].name != "universe" ? model.joints[root_joint_id].nv() : 0;
   Eigen::VectorXd q_out = Eigen::VectorXd::Zero(reduced_model.nq);
   Eigen::VectorXd v_out = Eigen::VectorXd::Zero(reduced_model.nv);
-  Eigen::VectorXd tau_out = Eigen::VectorXd::Zero(
-      reduced_model.nv - model.joints[root_joint_id].nv());
+  Eigen::VectorXd tau_out = Eigen::VectorXd::Zero(reduced_model.nv - nv_root);
   toReduced(model, reduced_model, q_out, v_out, tau_out, q_in, v_in, tau_in);
   return {q_out, v_out, tau_out};
 }
