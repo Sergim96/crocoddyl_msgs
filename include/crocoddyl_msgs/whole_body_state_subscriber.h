@@ -221,7 +221,7 @@ private:
       f_tmp_;
 
   void init(const std::vector<std::string> &locked_joints = DEFAULT_VECTOR) {
-    const std::size_t nv_root = getRootDim(model_);
+    const std::size_t nv_root = getRootNv(model_);
     if (locked_joints.size() != 0) {
       // Check the size of the reference configuration
       if (qref_.size() != model_.nq) {

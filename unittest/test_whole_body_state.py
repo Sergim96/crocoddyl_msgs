@@ -29,7 +29,7 @@ from crocoddyl_ros import (
     WholeBodyStateRosPublisher,
     WholeBodyStateRosSubscriber,
     toReduced,
-    getRootDim,
+    getRootNv,
 )
 
 
@@ -89,7 +89,7 @@ class TestWholeBodyStateAbstract(unittest.TestCase):
         pub = WholeBodyStateRosPublisher(self.MODEL, "whole_body_state_without_contact")
         time.sleep(1)
         # publish whole-body state messages
-        nv_root = getRootDim(self.MODEL)
+        nv_root = getRootNv(self.MODEL)
         q = pinocchio.randomConfiguration(self.MODEL)
         v = np.random.rand(self.MODEL.nv)
         tau = np.random.rand(self.MODEL.nv - nv_root)
@@ -111,7 +111,7 @@ class TestWholeBodyStateAbstract(unittest.TestCase):
         pub = WholeBodyStateRosPublisher(self.MODEL, "whole_body_state")
         time.sleep(1)
         # publish whole-body state messages
-        nv_root = getRootDim(self.MODEL)
+        nv_root = getRootNv(self.MODEL)
         q = pinocchio.randomConfiguration(self.MODEL)
         v = np.random.rand(self.MODEL.nv)
         tau = np.random.rand(self.MODEL.nv - nv_root)
@@ -158,19 +158,17 @@ class TestWholeBodyStateAbstract(unittest.TestCase):
             )
 
     def test_communication_with_reduced_model(self):
-        # locked_joints = ["larm_elbow_joint", "rarm_elbow_joint"]
-        locked_joints = ["wrist2_joint"]
         qref = pinocchio.randomConfiguration(self.MODEL)
         reduced_model = pinocchio.buildReducedModel(
-            self.MODEL, [self.MODEL.getJointId(name) for name in locked_joints], qref
+            self.MODEL, [self.MODEL.getJointId(name) for name in self.LOCKED_JOINTS], qref
         )
         sub = WholeBodyStateRosSubscriber(
-            self.MODEL, locked_joints, qref, "reduced_whole_body_state"
+            self.MODEL, self.LOCKED_JOINTS, qref, "reduced_whole_body_state"
         )
-        pub = WholeBodyStateRosPublisher(self.MODEL, locked_joints, qref, "reduced_whole_body_state")
+        pub = WholeBodyStateRosPublisher(self.MODEL, self.LOCKED_JOINTS, qref, "reduced_whole_body_state")
         time.sleep(1)
         # publish whole-body state messages
-        nv_root = getRootDim(self.MODEL)
+        nv_root = getRootNv(self.MODEL)
         q = pinocchio.randomConfiguration(self.MODEL)
         v = np.random.rand(self.MODEL.nv)
         tau = np.random.rand(self.MODEL.nv - nv_root)
@@ -229,7 +227,7 @@ class TestWholeBodyStateAbstract(unittest.TestCase):
         pub = WholeBodyStateRosPublisher(self.MODEL, locked_joints, qref, "non_locked_whole_body_state")
         time.sleep(1)
         # publish whole-body state messages
-        nv_root = getRootDim(self.MODEL)
+        nv_root = getRootNv(self.MODEL)
         q = pinocchio.randomConfiguration(self.MODEL)
         v = np.random.rand(self.MODEL.nv)
         tau = np.random.rand(self.MODEL.nv - nv_root)

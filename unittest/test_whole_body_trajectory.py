@@ -29,7 +29,7 @@ from crocoddyl_ros import (
     WholeBodyTrajectoryRosPublisher,
     WholeBodyTrajectoryRosSubscriber,
     toReduced,
-    getRootDim,
+    getRootNv,
 )
 
 
@@ -103,7 +103,7 @@ class TestWholeBodyTrajectoryAbstract(unittest.TestCase):
         # publish whole-body trajectory messages
         N = len(self.ts)
         xs = []
-        nv_root = getRootDim(self.MODEL)
+        nv_root = getRootNv(self.MODEL)
         for _ in range(N):
             q = pinocchio.randomConfiguration(self.MODEL)
             q[:3] = np.random.rand(3)
@@ -135,7 +135,7 @@ class TestWholeBodyTrajectoryAbstract(unittest.TestCase):
             q[:3] = np.random.rand(3)
             v = np.random.rand(self.MODEL.nv)
             xs.append(np.hstack([q, v]))
-        nv_root = getRootDim(self.MODEL)
+        nv_root = getRootNv(self.MODEL)
         us = [np.random.rand(self.MODEL.nv - nv_root) for _ in range(N)]
         while True:
             pub.publish(self.ts, xs, us, self.ps, self.pds, self.fs, self.ss)
@@ -200,7 +200,7 @@ class TestWholeBodyTrajectoryAbstract(unittest.TestCase):
         # publish whole-body trajectory messages
         N = len(self.ts)
         xs, us = [], []
-        nv_root = getRootDim(self.MODEL)
+        nv_root = getRootNv(self.MODEL)
         for _ in range(N):
             q = pinocchio.randomConfiguration(self.MODEL)
             q[:3] = np.random.rand(3)
@@ -258,21 +258,22 @@ class TestWholeBodyTrajectoryAbstract(unittest.TestCase):
                 )
 
     def test_communication_with_non_locked_joints(self):
+        locked_joints = []
         qref = pinocchio.randomConfiguration(self.MODEL)
         reduced_model = pinocchio.buildReducedModel(
-            self.MODEL, [self.MODEL.getJointId(name) for name in self.LOCKED_JOINTS], qref
+            self.MODEL, [self.MODEL.getJointId(name) for name in locked_joints], qref
         )
         sub = WholeBodyTrajectoryRosSubscriber(
-            self.MODEL, self.LOCKED_JOINTS, qref, "non_locked_whole_body_trajectory"
+            self.MODEL, locked_joints, qref, "non_locked_whole_body_trajectory"
         )
         pub = WholeBodyTrajectoryRosPublisher(
-            self.MODEL, self.LOCKED_JOINTS, qref, "non_locked_whole_body_trajectory"
+            self.MODEL, locked_joints, qref, "non_locked_whole_body_trajectory"
         )
         time.sleep(1)
         # publish whole-body trajectory messages
         N = len(self.ts)
         xs, us = [], []
-        nv_root = getRootDim(self.MODEL)
+        nv_root = getRootNv(self.MODEL)
         for _ in range(N):
             q = pinocchio.randomConfiguration(self.MODEL)
             q[:3] = np.random.rand(3)

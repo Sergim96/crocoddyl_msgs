@@ -183,7 +183,7 @@ private:
       }
       pinocchio::buildReducedModel(model_, joint_ids_, qref_, reduced_model_);
       // Initialize the vectors and dimensions
-      const std::size_t nv_root = getRootDim(model_);
+      const std::size_t nv_root = getRootNv(model_);
       qfull_ = Eigen::VectorXd::Zero(model_.nq);
       vfull_ = Eigen::VectorXd::Zero(model_.nv);
       ufull_ = Eigen::VectorXd::Zero(model_.nv - nv_root);

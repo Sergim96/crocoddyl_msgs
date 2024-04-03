@@ -90,12 +90,24 @@ static inline std::size_t getRootJointId(
 }
 
 /**
- * @brief Return the root dimension
+ * @brief Return the root nq dimension
  *
- * @param return  Root joint dimension
+ * @param return  Root joint nq dimension
  */
 template <int Options, template <typename, int> class JointCollectionTpl>
-static inline std::size_t getRootDim(
+static inline std::size_t getRootNq(
+  const pinocchio::ModelTpl<double, Options, JointCollectionTpl> &model) {
+  const std::size_t root_joint_id = getRootJointId(model);
+  return model.frames[root_joint_id].name != "universe" ? model.joints[root_joint_id].nq() : 0;
+}
+
+/**
+ * @brief Return the root nv dimension
+ *
+ * @param return  Root joint nv dimension
+ */
+template <int Options, template <typename, int> class JointCollectionTpl>
+static inline std::size_t getRootNv(
   const pinocchio::ModelTpl<double, Options, JointCollectionTpl> &model) {
   const std::size_t root_joint_id = getRootJointId(model);
   return model.frames[root_joint_id].name != "universe" ? model.joints[root_joint_id].nv() : 0;
@@ -215,8 +227,8 @@ static inline void toMsg(
                                 " but received " + std::to_string(a.size()));
   }
   const std::size_t root_joint_id = getRootJointId(model);
-  const std::size_t nq_root = model.frames[root_joint_id].name != "universe" ? model.joints[root_joint_id].nq() : 0;
-  const std::size_t nv_root = model.frames[root_joint_id].name != "universe" ? model.joints[root_joint_id].nv() : 0;
+  const std::size_t nq_root = getRootNq(model);
+  const std::size_t nv_root = getRootNv(model);
   const std::size_t njoints = model.nv - nv_root;
   if (tau.size() != static_cast<int>(njoints) && tau.size() != 0) {
     throw std::invalid_argument("Expected tau to be 0 or " +
@@ -689,8 +701,8 @@ static inline void fromReduced(
     const Eigen::Ref<const Eigen::VectorXd> &qref,
     const std::vector<pinocchio::JointIndex> &locked_joint_ids) {
   const std::size_t root_joint_id = getRootJointId(model);
-  const std::size_t nq_root = model.frames[root_joint_id].name != "universe" ? model.joints[root_joint_id].nq() : 0;
-  const std::size_t nv_root = model.frames[root_joint_id].name != "universe" ? model.joints[root_joint_id].nv() : 0;
+  const std::size_t nq_root = getRootNq(model);
+  const std::size_t nv_root = getRootNv(model);
   const std::size_t njoints = model.nv - nv_root;
   const std::size_t njoints_reduced = reduced_model.nv - nv_root;
   if (q_out.size() != model.nq) {
@@ -770,8 +782,8 @@ toReduced(const pinocchio::ModelTpl<double, Options, JointCollectionTpl> &model,
           const Eigen::Ref<const Eigen::VectorXd> &v_in,
           const Eigen::Ref<const Eigen::VectorXd> &tau_in) {
   const std::size_t root_joint_id = getRootJointId(model);
-  const std::size_t nq_root = model.frames[root_joint_id].name != "universe" ? model.joints[root_joint_id].nq() : 0;
-  const std::size_t nv_root = model.frames[root_joint_id].name != "universe" ? model.joints[root_joint_id].nv() : 0;
+  const std::size_t nq_root = getRootNq(model);
+  const std::size_t nv_root = getRootNv(model);
   const std::size_t njoints = model.nv - nv_root;
   const std::size_t njoints_reduced = reduced_model.nv - nv_root;
   if (q_out.size() != reduced_model.nq) {
