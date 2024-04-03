@@ -29,10 +29,14 @@ from crocoddyl_ros import (
     WholeBodyTrajectoryRosPublisher,
     WholeBodyTrajectoryRosSubscriber,
     toReduced,
+    getRootDim,
 )
 
 
-class TestWholeBodyTrajectory(unittest.TestCase):
+class TestWholeBodyTrajectoryAbstract(unittest.TestCase):
+    MODEL = None
+    LOCKED_JOINTS = None
+
     def setUp(self) -> None:
         if ROS_VERSION == 2:
             if not rclpy.ok():
@@ -93,19 +97,19 @@ class TestWholeBodyTrajectory(unittest.TestCase):
             )
 
     def test_publisher_without_contact(self):
-        model = pinocchio.buildSampleModelHumanoid()
-        sub = WholeBodyTrajectoryRosSubscriber(model, "whole_body_trajectory_without_contact")
-        pub = WholeBodyTrajectoryRosPublisher(model, "whole_body_trajectory_without_contact")
+        sub = WholeBodyTrajectoryRosSubscriber(self.MODEL, "whole_body_trajectory_without_contact")
+        pub = WholeBodyTrajectoryRosPublisher(self.MODEL, "whole_body_trajectory_without_contact")
         time.sleep(1)
         # publish whole-body trajectory messages
         N = len(self.ts)
         xs = []
+        nv_root = getRootDim(self.MODEL)
         for _ in range(N):
-            q = pinocchio.randomConfiguration(model)
+            q = pinocchio.randomConfiguration(self.MODEL)
             q[:3] = np.random.rand(3)
-            v = np.random.rand(model.nv)
+            v = np.random.rand(self.MODEL.nv)
             xs.append(np.hstack([q, v]))
-        us = [np.random.rand(model.nv - 6) for _ in range(N)]
+        us = [np.random.rand(self.MODEL.nv - nv_root) for _ in range(N)]
         while True:
             pub.publish(self.ts, xs, us)
             if sub.has_new_msg():
@@ -120,19 +124,19 @@ class TestWholeBodyTrajectory(unittest.TestCase):
             self.assertTrue(np.allclose(us, _us, atol=1e-9), "Wrong u at " + str(i))
 
     def test_communication(self):
-        model = pinocchio.buildSampleModelHumanoid()
-        sub = WholeBodyTrajectoryRosSubscriber(model, "whole_body_trajectory")
-        pub = WholeBodyTrajectoryRosPublisher(model, "whole_body_trajectory")
+        sub = WholeBodyTrajectoryRosSubscriber(self.MODEL, "whole_body_trajectory")
+        pub = WholeBodyTrajectoryRosPublisher(self.MODEL, "whole_body_trajectory")
         time.sleep(1)
         # publish whole-body trajectory messages
         N = len(self.ts)
         xs = []
         for _ in range(N):
-            q = pinocchio.randomConfiguration(model)
+            q = pinocchio.randomConfiguration(self.MODEL)
             q[:3] = np.random.rand(3)
-            v = np.random.rand(model.nv)
+            v = np.random.rand(self.MODEL.nv)
             xs.append(np.hstack([q, v]))
-        us = [np.random.rand(model.nv - 6) for _ in range(N)]
+        nv_root = getRootDim(self.MODEL)
+        us = [np.random.rand(self.MODEL.nv - nv_root) for _ in range(N)]
         while True:
             pub.publish(self.ts, xs, us, self.ps, self.pds, self.fs, self.ss)
             if sub.has_new_msg():
@@ -182,28 +186,27 @@ class TestWholeBodyTrajectory(unittest.TestCase):
                 )
 
     def test_communication_with_reduced_model(self):
-        model = pinocchio.buildSampleModelHumanoid()
-        locked_joints = ["larm_elbow_joint", "rarm_elbow_joint"]
-        qref = pinocchio.randomConfiguration(model)
+        qref = pinocchio.randomConfiguration(self.MODEL)
         reduced_model = pinocchio.buildReducedModel(
-            model, [model.getJointId(name) for name in locked_joints], qref
+            self.MODEL, [self.MODEL.getJointId(name) for name in self.LOCKED_JOINTS], qref
         )
         sub = WholeBodyTrajectoryRosSubscriber(
-            model, locked_joints, qref, "reduced_whole_body_trajectory"
+            self.MODEL, self.LOCKED_JOINTS, qref, "reduced_whole_body_trajectory"
         )
         pub = WholeBodyTrajectoryRosPublisher(
-            model, locked_joints, qref, "reduced_whole_body_trajectory"
+            self.MODEL, self.LOCKED_JOINTS, qref, "reduced_whole_body_trajectory"
         )
         time.sleep(1)
         # publish whole-body trajectory messages
         N = len(self.ts)
         xs, us = [], []
+        nv_root = getRootDim(self.MODEL)
         for _ in range(N):
-            q = pinocchio.randomConfiguration(model)
+            q = pinocchio.randomConfiguration(self.MODEL)
             q[:3] = np.random.rand(3)
-            v = np.random.rand(model.nv)
-            tau = np.random.rand(model.nv - 6)
-            q, v, tau = toReduced(model, reduced_model, q, v, tau)
+            v = np.random.rand(self.MODEL.nv)
+            tau = np.random.rand(self.MODEL.nv - nv_root)
+            q, v, tau = toReduced(self.MODEL, reduced_model, q, v, tau)
             xs.append(np.hstack([q, v]))
             us.append(tau)
         while True:
@@ -255,28 +258,27 @@ class TestWholeBodyTrajectory(unittest.TestCase):
                 )
 
     def test_communication_with_non_locked_joints(self):
-        model = pinocchio.buildSampleModelHumanoid()
-        locked_joints = ["larm_elbow_joint", "rarm_elbow_joint"]
-        qref = pinocchio.randomConfiguration(model)
+        qref = pinocchio.randomConfiguration(self.MODEL)
         reduced_model = pinocchio.buildReducedModel(
-            model, [model.getJointId(name) for name in locked_joints], qref
+            self.MODEL, [self.MODEL.getJointId(name) for name in self.LOCKED_JOINTS], qref
         )
         sub = WholeBodyTrajectoryRosSubscriber(
-            model, locked_joints, qref, "non_locked_whole_body_trajectory"
+            self.MODEL, self.LOCKED_JOINTS, qref, "non_locked_whole_body_trajectory"
         )
         pub = WholeBodyTrajectoryRosPublisher(
-            model, locked_joints, qref, "non_locked_whole_body_trajectory"
+            self.MODEL, self.LOCKED_JOINTS, qref, "non_locked_whole_body_trajectory"
         )
         time.sleep(1)
         # publish whole-body trajectory messages
         N = len(self.ts)
         xs, us = [], []
+        nv_root = getRootDim(self.MODEL)
         for _ in range(N):
-            q = pinocchio.randomConfiguration(model)
+            q = pinocchio.randomConfiguration(self.MODEL)
             q[:3] = np.random.rand(3)
-            v = np.random.rand(model.nv)
-            tau = np.random.rand(model.nv - 6)
-            q, v, tau = toReduced(model, reduced_model, q, v, tau)
+            v = np.random.rand(self.MODEL.nv)
+            tau = np.random.rand(self.MODEL.nv - nv_root)
+            q, v, tau = toReduced(self.MODEL, reduced_model, q, v, tau)
             xs.append(np.hstack([q, v]))
             us.append(tau)
         while True:
@@ -327,11 +329,29 @@ class TestWholeBodyTrajectory(unittest.TestCase):
                     "Wrong contact friction coefficient at " + name + ", " + str(i),
                 )
 
+class SampleHumanoidTest(TestWholeBodyTrajectoryAbstract):
+    MODEL = pinocchio.buildSampleModelHumanoid()
+    LOCKED_JOINTS = ["larm_elbow_joint", "rarm_elbow_joint"]
+
+class SampleManipulatorTest(TestWholeBodyTrajectoryAbstract):
+    MODEL = pinocchio.buildSampleModelManipulator()
+    LOCKED_JOINTS = ["wrist1_joint", "wrist2_joint"]
 
 if __name__ == "__main__":
+    test_classes_to_run = [
+        SampleHumanoidTest,
+        SampleManipulatorTest,
+    ]
     if ROS_VERSION == 2:
-        unittest.main()
+        # test to be run
+        loader = unittest.TestLoader()
+        suites_list = []
+        for test_class in test_classes_to_run:
+            suite = loader.loadTestsFromTestCase(test_class)
+            suites_list.append(suite)
+        big_suite = unittest.TestSuite(suites_list)
+        runner = unittest.TextTestRunner()
+        results = runner.run(big_suite)
     else:
-        rosunit.unitrun(
-            "crocoddyl_msgs", "whole_body_trajectory", TestWholeBodyTrajectory
-        )
+        for test_class in test_classes_to_run:
+            rosunit.unitrun("crocoddyl_msgs", "whole_body_state", test_class)
