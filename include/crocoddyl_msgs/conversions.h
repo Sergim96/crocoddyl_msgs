@@ -562,7 +562,7 @@ fromMsg(const pinocchio::ModelTpl<double, Options, JointCollectionTpl> &model,
                                 " but received " + std::to_string(v.size()));
   }
   const std::size_t root_joint_id = getRootJointId(model);
-  const std::size_t nv_root = model.frames[root_joint_id].name != "universe" ? model.joints[root_joint_id].nv() : 0;
+  const std::size_t nv_root = getRootNv(model);
   const std::size_t njoints = model.nv - nv_root;
   if (tau.size() != static_cast<int>(njoints)) {
     throw std::invalid_argument("Expected tau to be " +
@@ -864,7 +864,7 @@ toReduced_return(
     const Eigen::Ref<const Eigen::VectorXd> &v_in,
     const Eigen::Ref<const Eigen::VectorXd> &tau_in) {
   const std::size_t root_joint_id = getRootJointId(model);
-  const std::size_t nv_root = model.frames[root_joint_id].name != "universe" ? model.joints[root_joint_id].nv() : 0;
+  const std::size_t nv_root = getRootNv(model);
   Eigen::VectorXd q_out = Eigen::VectorXd::Zero(reduced_model.nq);
   Eigen::VectorXd v_out = Eigen::VectorXd::Zero(reduced_model.nv);
   Eigen::VectorXd tau_out = Eigen::VectorXd::Zero(reduced_model.nv - nv_root);
