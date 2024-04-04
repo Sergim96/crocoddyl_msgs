@@ -73,7 +73,10 @@ public:
       pub_.msg_.header.stamp = ros::Time::now();
 #endif
       unsigned int i = 0;
-      for (const auto &[body_name, psi] : parameters) {
+      for (const auto &pair : parameters) {
+        const auto &body_name = pair.first; // The key of the map (string)
+        const auto &psi =
+            pair.second; // The value of the map (Eigen::Ref<const Vector10d>)
         pub_.msg_.parameters[i].name = body_name;
         pub_.msg_.parameters[i].inertia.m = psi[0];
         pub_.msg_.parameters[i].inertia.com.x = psi[1] / psi[0];

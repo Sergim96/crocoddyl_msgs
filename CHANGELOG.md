@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 * Supported fixed-based robots in https://github.com/RobotMotorIntelligence/crocoddyl_msgs/pull/17
+* Add inertial parameters publisher/subscriber and extend whole-body state publisher with accelerations in https://github.com/RobotMotorIntelligence/crocoddyl_msgs/pull/16
 
 ## [1.3.1] - 2024-01-27
 

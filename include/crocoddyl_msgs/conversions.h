@@ -101,7 +101,7 @@ static inline std::size_t getRootJointId(
  */
 template <int Options, template <typename, int> class JointCollectionTpl>
 static inline std::size_t getRootNq(
-  const pinocchio::ModelTpl<double, Options, JointCollectionTpl> &model) {
+    const pinocchio::ModelTpl<double, Options, JointCollectionTpl> &model) {
   const std::size_t root_joint_id = getRootJointId(model);
   return model.frames[root_joint_id].name != "universe" ? model.joints[root_joint_id].nq() : 0;
 }
@@ -113,7 +113,7 @@ static inline std::size_t getRootNq(
  */
 template <int Options, template <typename, int> class JointCollectionTpl>
 static inline std::size_t getRootNv(
-  const pinocchio::ModelTpl<double, Options, JointCollectionTpl> &model) {
+    const pinocchio::ModelTpl<double, Options, JointCollectionTpl> &model) {
   const std::size_t root_joint_id = getRootJointId(model);
   return model.frames[root_joint_id].name != "universe" ? model.joints[root_joint_id].nv() : 0;
 }
@@ -566,7 +566,6 @@ fromMsg(const pinocchio::ModelTpl<double, Options, JointCollectionTpl> &model,
     throw std::invalid_argument("Expected a to be " + std::to_string(model.nv) +
                                 " but received " + std::to_string(v.size()));
   }
-  const std::size_t root_joint_id = getRootJointId(model);
   const std::size_t nv_root = getRootNv(model);
   const std::size_t njoints = model.nv - nv_root;
   if (tau.size() != static_cast<int>(njoints)) {
@@ -971,8 +970,10 @@ toReduced(const pinocchio::ModelTpl<double, Options, JointCollectionTpl> &model,
           const Eigen::Ref<const Eigen::VectorXd> &a_in,
           const Eigen::Ref<const Eigen::VectorXd> &tau_in) {
   const std::size_t root_joint_id = getRootJointId(model);
-  const std::size_t nq_root = model.joints[root_joint_id].nq();
-  const std::size_t nv_root = model.joints[root_joint_id].nv();
+  const std::size_t nq_root = getRootNq(model);
+  const std::size_t nv_root = getRootNv(model);
+  const std::size_t njoints = model.nv - nv_root;
+  const std::size_t njoints_reduced = reduced_model.nv - nv_root;
   if (q_out.size() != reduced_model.nq) {
     throw std::invalid_argument(
         "Expected q_out to be " + std::to_string(reduced_model.nq) +
@@ -1063,7 +1064,6 @@ toReduced_return(
     const Eigen::Ref<const Eigen::VectorXd> &q_in,
     const Eigen::Ref<const Eigen::VectorXd> &v_in,
     const Eigen::Ref<const Eigen::VectorXd> &tau_in) {
-  const std::size_t root_joint_id = getRootJointId(model);
   const std::size_t nv_root = getRootNv(model);
   Eigen::VectorXd q_out = Eigen::VectorXd::Zero(reduced_model.nq);
   Eigen::VectorXd v_out = Eigen::VectorXd::Zero(reduced_model.nv);

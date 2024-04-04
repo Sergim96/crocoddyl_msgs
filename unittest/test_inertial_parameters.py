@@ -29,7 +29,8 @@ from crocoddyl_ros import (
 )
 
 
-class TestInertialParameters(unittest.TestCase):
+class TestInertialParametersAbstract(unittest.TestCase):
+    MODEL = None
     def setUp(self):
         if ROS_VERSION == 2:
             if not rclpy.ok():
@@ -38,18 +39,17 @@ class TestInertialParameters(unittest.TestCase):
             rospy.init_node("crocoddyl_ros", anonymous=True)
 
     def test_communication(self):
-        model = pinocchio.buildSampleModelHumanoid()
         pub = MultibodyInertialParametersRosPublisher("inertial_parameters")
         sub = MultibodyInertialParametersRosSubscriber("inertial_parameters")
         time.sleep(1)
         # create the name index
         parameters = {}
-        names = model.names.tolist()
+        names = self.MODEL.names.tolist()
         # publish the inertial parameters
         # note: we have to skip the first body as it is the "universe" one and it is
         # initialized with mass=0, leading to a division by 0
-        for i in range(1, model.nbodies):
-            parameters[names[i]] = model.inertias[i].toDynamicParameters()
+        for i in range(1, self.MODEL.nbodies):
+            parameters[names[i]] = self.MODEL.inertias[i].toDynamicParameters()
 
         while True:
             pub.publish(parameters)
@@ -57,7 +57,7 @@ class TestInertialParameters(unittest.TestCase):
                 break
 
         _parameters = sub.get_parameters()
-        for i in range(1, model.nbodies):
+        for i in range(1, self.MODEL.nbodies):
             self.assertTrue(
                 np.allclose(_parameters[names[i]], parameters[names[i]], atol=1e-9),
                 "Wrong parameters in "
@@ -70,9 +70,27 @@ class TestInertialParameters(unittest.TestCase):
                 + str(_parameters[names[i]]),
             )
 
+class SampleHumanoidTest(TestInertialParametersAbstract):
+    MODEL = pinocchio.buildSampleModelHumanoid()
+
+class SampleManipulatorTest(TestInertialParametersAbstract):
+    MODEL = pinocchio.buildSampleModelManipulator()
 
 if __name__ == "__main__":
+    test_classes_to_run = [
+        SampleHumanoidTest,
+        SampleManipulatorTest,
+    ]
     if ROS_VERSION == 2:
-        unittest.main()
+        # test to be run
+        loader = unittest.TestLoader()
+        suites_list = []
+        for test_class in test_classes_to_run:
+            suite = loader.loadTestsFromTestCase(test_class)
+            suites_list.append(suite)
+        big_suite = unittest.TestSuite(suites_list)
+        runner = unittest.TextTestRunner()
+        results = runner.run(big_suite)
     else:
-        rosunit.unitrun("crocoddyl_msgs", "inertial_parameters", TestInertialParameters)
+        for test_class in test_classes_to_run:
+            rosunit.unitrun("crocoddyl_msgs", "inertial_parameters", test_class)

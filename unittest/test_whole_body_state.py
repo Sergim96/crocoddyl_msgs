@@ -275,12 +275,11 @@ class TestWholeBodyStateAbstract(unittest.TestCase):
             )
 
     def test_update_model(self):
-        model = pinocchio.buildSampleModelHumanoid()
-        pub = WholeBodyStateRosPublisher(model, "whole_body_state_update_model")
-        sub = WholeBodyStateRosPublisher(model, "whole_body_state_update_model")
+        pub = WholeBodyStateRosPublisher(self.MODEL, "whole_body_state_update_model")
+        sub = WholeBodyStateRosPublisher(self.MODEL, "whole_body_state_update_model")
         time.sleep(1)
         # publish whole-body state messages
-        names = model.names.tolist()
+        names = self.MODEL.names.tolist()
         new_parameters = []
         for name in names:
             psi = pinocchio.Inertia().Random().toDynamicParameters()
