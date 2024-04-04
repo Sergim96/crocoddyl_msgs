@@ -90,6 +90,30 @@ static inline std::size_t getRootJointId(
 }
 
 /**
+ * @brief Return the root nq dimension
+ *
+ * @param return  Root joint nq dimension
+ */
+template <int Options, template <typename, int> class JointCollectionTpl>
+static inline std::size_t getRootNq(
+  const pinocchio::ModelTpl<double, Options, JointCollectionTpl> &model) {
+  const std::size_t root_joint_id = getRootJointId(model);
+  return model.frames[root_joint_id].name != "universe" ? model.joints[root_joint_id].nq() : 0;
+}
+
+/**
+ * @brief Return the root nv dimension
+ *
+ * @param return  Root joint nv dimension
+ */
+template <int Options, template <typename, int> class JointCollectionTpl>
+static inline std::size_t getRootNv(
+  const pinocchio::ModelTpl<double, Options, JointCollectionTpl> &model) {
+  const std::size_t root_joint_id = getRootJointId(model);
+  return model.frames[root_joint_id].name != "universe" ? model.joints[root_joint_id].nv() : 0;
+}
+
+/**
  * @brief Conversion of Eigen to message for a given
  * crocoddyl_msgs::FeedbackGain message reference
  *
@@ -203,7 +227,8 @@ static inline void toMsg(
                                 " but received " + std::to_string(a.size()));
   }
   const std::size_t root_joint_id = getRootJointId(model);
-  const std::size_t nv_root = model.joints[root_joint_id].nv();
+  const std::size_t nq_root = getRootNq(model);
+  const std::size_t nv_root = getRootNv(model);
   const std::size_t njoints = model.nv - nv_root;
   if (tau.size() != static_cast<int>(njoints) && tau.size() != 0) {
     throw std::invalid_argument("Expected tau to be 0 or " +
@@ -236,7 +261,7 @@ static inline void toMsg(
     msg.centroidal.base_angular_velocity.x = v(3);
     msg.centroidal.base_angular_velocity.y = v(4);
     msg.centroidal.base_angular_velocity.z = v(5);
-  } else if (nv_root != 0) {
+  } else if (nv_root > 0) {
     std::cerr
         << "Warning: toMsg conversion does not yet support root joints "
            "different to a floating base. We cannot publish base information."
@@ -262,10 +287,10 @@ static inline void toMsg(
   // Filling the joint state
   msg.joints.resize(njoints);
   for (std::size_t j = 0; j < njoints; ++j) {
-    msg.joints[j].name = model.names[2 + j];
-    msg.joints[j].position = q(model.joints[1].nq() + j);
-    msg.joints[j].velocity = v(model.joints[1].nv() + j);
-    msg.joints[j].acceleration = a(model.joints[1].nv() + j);
+    msg.joints[j].name = model.names[root_joint_id + j + 1];
+    msg.joints[j].position = q(nq_root + j);
+    msg.joints[j].velocity = v(nv_root + j);
+    msg.joints[j].acceleration = a(nv_root + j);
     if (tau.size() != 0) {
       msg.joints[j].effort = tau(j);
     }
@@ -537,7 +562,7 @@ fromMsg(const pinocchio::ModelTpl<double, Options, JointCollectionTpl> &model,
                                 " but received " + std::to_string(v.size()));
   }
   const std::size_t root_joint_id = getRootJointId(model);
-  const std::size_t nv_root = model.joints[root_joint_id].nv();
+  const std::size_t nv_root = getRootNv(model);
   const std::size_t njoints = model.nv - nv_root;
   if (tau.size() != static_cast<int>(njoints)) {
     throw std::invalid_argument("Expected tau to be " +
@@ -587,7 +612,7 @@ fromMsg(const pinocchio::ModelTpl<double, Options, JointCollectionTpl> &model,
                       .toRotationMatrix()
                       .transpose() *
                   v.head<3>(); // local frame
-  } else if (nv_root != 0) {
+  } else if (nv_root > 0) {
     std::cerr
         << "Warning: fromMsg conversion does not yet support root joints "
            "different to a floating base. We cannot publish base information."
@@ -676,8 +701,10 @@ static inline void fromReduced(
     const Eigen::Ref<const Eigen::VectorXd> &qref,
     const std::vector<pinocchio::JointIndex> &locked_joint_ids) {
   const std::size_t root_joint_id = getRootJointId(model);
-  const std::size_t nq_root = model.joints[root_joint_id].nq();
-  const std::size_t nv_root = model.joints[root_joint_id].nv();
+  const std::size_t nq_root = getRootNq(model);
+  const std::size_t nv_root = getRootNv(model);
+  const std::size_t njoints = model.nv - nv_root;
+  const std::size_t njoints_reduced = reduced_model.nv - nv_root;
   if (q_out.size() != model.nq) {
     throw std::invalid_argument("Expected q_out to be " +
                                 std::to_string(model.nq) + " but received " +
@@ -698,14 +725,14 @@ static inline void fromReduced(
                                 std::to_string(reduced_model.nv) +
                                 " but received " + std::to_string(v_in.size()));
   }
-  if (static_cast<std::size_t>(tau_out.size()) != model.nv - nv_root) {
+  if (static_cast<std::size_t>(tau_out.size()) != njoints) {
     throw std::invalid_argument(
-        "Expected tau_out to be " + std::to_string(model.nv - nv_root) +
+        "Expected tau_out to be " + std::to_string(njoints) +
         " but received " + std::to_string(tau_out.size()));
   }
-  if (static_cast<std::size_t>(tau_in.size()) != reduced_model.nv - nv_root) {
+  if (static_cast<std::size_t>(tau_in.size()) != njoints_reduced) {
     throw std::invalid_argument(
-        "Expected tau_in to be " + std::to_string(reduced_model.nv - nv_root) +
+        "Expected tau_in to be " + std::to_string(njoints_reduced) +
         " but received " + std::to_string(tau_in.size()));
   }
 
@@ -755,8 +782,10 @@ toReduced(const pinocchio::ModelTpl<double, Options, JointCollectionTpl> &model,
           const Eigen::Ref<const Eigen::VectorXd> &v_in,
           const Eigen::Ref<const Eigen::VectorXd> &tau_in) {
   const std::size_t root_joint_id = getRootJointId(model);
-  const std::size_t nq_root = model.joints[root_joint_id].nq();
-  const std::size_t nv_root = model.joints[root_joint_id].nv();
+  const std::size_t nq_root = getRootNq(model);
+  const std::size_t nv_root = getRootNv(model);
+  const std::size_t njoints = model.nv - nv_root;
+  const std::size_t njoints_reduced = reduced_model.nv - nv_root;
   if (q_out.size() != reduced_model.nq) {
     throw std::invalid_argument(
         "Expected q_out to be " + std::to_string(reduced_model.nq) +
@@ -777,14 +806,14 @@ toReduced(const pinocchio::ModelTpl<double, Options, JointCollectionTpl> &model,
                                 std::to_string(model.nv) + " but received " +
                                 std::to_string(v_in.size()));
   }
-  if (static_cast<std::size_t>(tau_out.size()) != reduced_model.nv - nv_root) {
+  if (static_cast<std::size_t>(tau_out.size()) != njoints_reduced) {
     throw std::invalid_argument(
-        "Expected tau_out to be " + std::to_string(reduced_model.nv - nv_root) +
+        "Expected tau_out to be " + std::to_string(njoints_reduced) +
         " but received " + std::to_string(tau_out.size()));
   }
-  if (static_cast<std::size_t>(tau_in.size()) != model.nv - nv_root) {
+  if (static_cast<std::size_t>(tau_in.size()) != njoints) {
     throw std::invalid_argument(
-        "Expected tau_in to be " + std::to_string(model.nv - nv_root) +
+        "Expected tau_in to be " + std::to_string(njoints) +
         " but received " + std::to_string(tau_in.size()));
   }
 
@@ -835,10 +864,10 @@ toReduced_return(
     const Eigen::Ref<const Eigen::VectorXd> &v_in,
     const Eigen::Ref<const Eigen::VectorXd> &tau_in) {
   const std::size_t root_joint_id = getRootJointId(model);
+  const std::size_t nv_root = getRootNv(model);
   Eigen::VectorXd q_out = Eigen::VectorXd::Zero(reduced_model.nq);
   Eigen::VectorXd v_out = Eigen::VectorXd::Zero(reduced_model.nv);
-  Eigen::VectorXd tau_out = Eigen::VectorXd::Zero(
-      reduced_model.nv - model.joints[root_joint_id].nv());
+  Eigen::VectorXd tau_out = Eigen::VectorXd::Zero(reduced_model.nv - nv_root);
   toReduced(model, reduced_model, q_out, v_out, tau_out, q_in, v_in, tau_in);
   return {q_out, v_out, tau_out};
 }

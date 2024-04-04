@@ -250,6 +250,16 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
            ":param model: Pinocchio model\n"
            ":return root joint id");
 
+  m.def("getRootNq", &getRootNq<0, pinocchio::JointCollectionDefaultTpl>,
+           "Return the root joint nq dimension.\n\n"
+           ":param model: Pinocchio model\n"
+           ":return root joint nq dimension");
+
+  m.def("getRootNv", &getRootNv<0, pinocchio::JointCollectionDefaultTpl>,
+           "Return the root joint nv dimension.\n\n"
+           ":param model: Pinocchio model\n"
+           ":return root joint nv dimension");
+
   m.def(
       "fromReduced",
       &fromReduced_return<0, pinocchio::JointCollectionDefaultTpl>,

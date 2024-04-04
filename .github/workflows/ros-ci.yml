@@ -1,5 +1,24 @@
 name: ROS
-on: [push, pull_request]
+on:
+  push:
+    paths-ignore:
+      - '.gitignore'
+      - '.pre-commit-config.yaml'
+      - '*.md'
+      - 'LICENSE'
+      - 'package.xml'
+      - 'dependencies.rosintall'
+  pull_request:
+    paths-ignore:
+      - '.gitignore'
+      - '.pre-commit-config.yaml'
+      - '*.md'
+      - 'LICENSE'
+      - 'package.xml'
+      - 'dependencies.rosintall'
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   CI:
@@ -17,10 +36,16 @@ jobs:
           # - {name: "(iron, Debug)", ROS_DISTRO: iron, CMAKE_ARGS: "-DCMAKE_BUILD_TYPE=Debug"}
     name: ${{ matrix.env.name }}
     env:
+      CCACHE_DIR: /github/home/.ccache
       UPSTREAM_WORKSPACE: dependencies.rosinstall
       CTEST_OUTPUT_ON_FAILURE: 1
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-${{ matrix.env.ROS_DISTRO }}-${{ matrix.env.ROS_REPO }}-${{ github.sha }}
+          restore-keys: ccache-${{ matrix.env.ROS_DISTRO }}-${{ matrix.env.ROS_REPO }}-
       - uses: 'ros-industrial/industrial_ci@master'
         env: ${{ matrix.env }}

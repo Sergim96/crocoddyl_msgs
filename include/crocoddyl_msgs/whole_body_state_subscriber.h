@@ -1,7 +1,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 // BSD 3-Clause License
 //
-// Copyright (C) 2020-2023, Heriot-Watt University, University of Oxford
+// Copyright (C) 2020-2024, Heriot-Watt University, University of Oxford
 // Copyright note valid unless otherwise stated in individual files.
 // All rights reserved.
 ///////////////////////////////////////////////////////////////////////////////
@@ -221,8 +221,7 @@ private:
       f_tmp_;
 
   void init(const std::vector<std::string> &locked_joints = DEFAULT_VECTOR) {
-    const std::size_t root_joint_id = getRootJointId(model_);
-    const std::size_t nv_root = model_.joints[root_joint_id].nv();
+    const std::size_t nv_root = getRootNv(model_);
     if (locked_joints.size() != 0) {
       // Check the size of the reference configuration
       if (qref_.size() != model_.nq) {
@@ -235,6 +234,7 @@ private:
 #endif
       }
       // Build the reduced model
+      std::size_t inexistent_joints = 0;
       for (std::string name : locked_joints) {
         if (model_.existJointName(name)) {
           joint_ids_.push_back(model_.getJointId(name));
@@ -245,7 +245,13 @@ private:
 #else
           ROS_ERROR_STREAM("Doesn't exist " << name << " joint");
 #endif
+          inexistent_joints += 1;
         }
+      }
+      // Check that locked joint exists to update q and v appropriately
+      if (inexistent_joints != 0) {
+        q_ = Eigen::VectorXd::Zero(model_.nq - locked_joints.size() + inexistent_joints);
+        v_ = Eigen::VectorXd::Zero(model_.nv - locked_joints.size() + inexistent_joints);
       }
       pinocchio::buildReducedModel(model_, joint_ids_, qref_, reduced_model_);
 

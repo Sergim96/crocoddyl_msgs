@@ -29,10 +29,14 @@ from crocoddyl_ros import (
     WholeBodyStateRosPublisher,
     WholeBodyStateRosSubscriber,
     toReduced,
+    getRootNv,
 )
 
 
-class TestWholeBodyState(unittest.TestCase):
+class TestWholeBodyStateAbstract(unittest.TestCase):
+    MODEL = None
+    LOCKED_JOINTS = None
+
     def setUp(self):
         if ROS_VERSION == 2:
             if not rclpy.ok():
@@ -81,44 +85,46 @@ class TestWholeBodyState(unittest.TestCase):
         }
 
     def test_publisher_without_contact(self):
-        model = pinocchio.buildSampleModelHumanoid()
-        sub = WholeBodyStateRosSubscriber(model, "whole_body_state_without_contact")
-        pub = WholeBodyStateRosPublisher(model, "whole_body_state_without_contact")
+        sub = WholeBodyStateRosSubscriber(self.MODEL, "whole_body_state_without_contact")
+        pub = WholeBodyStateRosPublisher(self.MODEL, "whole_body_state_without_contact")
         time.sleep(1)
         # publish whole-body state messages
-        q = pinocchio.randomConfiguration(model)
-        q[:3] = np.random.rand(3)
-        v = np.random.rand(model.nv)
-        tau = np.random.rand(model.nv - 6)
+        nv_root = getRootNv(self.MODEL)
+        q = pinocchio.randomConfiguration(self.MODEL)
+        v = np.random.rand(self.MODEL.nv)
+        tau = np.random.rand(self.MODEL.nv - nv_root)
         while True:
             pub.publish(self.t, q, v, tau)
             if sub.has_new_msg():
                 break
         # get whole-body state
         _t, _q, _v, _tau, _, _, _, _ = sub.get_state()
+        qdiff = pinocchio.difference(self.MODEL, q, _q)
+        mask = ~np.isnan(qdiff)
         self.assertEqual(self.t, _t, "Wrong time interval")
-        self.assertTrue(np.allclose(q, _q, atol=1e-9), "Wrong q")
+        self.assertTrue(np.allclose(qdiff[mask], np.zeros(self.MODEL.nv)[mask], atol=1e-9), "Wrong q")
         self.assertTrue(np.allclose(v, _v, atol=1e-9), "Wrong v")
         self.assertTrue(np.allclose(tau, _tau, atol=1e-9), "Wrong tau")
 
     def test_communication(self):
-        model = pinocchio.buildSampleModelHumanoid()
-        sub = WholeBodyStateRosSubscriber(model, "whole_body_state")
-        pub = WholeBodyStateRosPublisher(model, "whole_body_state")
+        sub = WholeBodyStateRosSubscriber(self.MODEL, "whole_body_state")
+        pub = WholeBodyStateRosPublisher(self.MODEL, "whole_body_state")
         time.sleep(1)
         # publish whole-body state messages
-        q = pinocchio.randomConfiguration(model)
-        q[:3] = np.random.rand(3)
-        v = np.random.rand(model.nv)
-        tau = np.random.rand(model.nv - 6)
+        nv_root = getRootNv(self.MODEL)
+        q = pinocchio.randomConfiguration(self.MODEL)
+        v = np.random.rand(self.MODEL.nv)
+        tau = np.random.rand(self.MODEL.nv - nv_root)
         while True:
             pub.publish(self.t, q, v, tau, self.p, self.pd, self.f, self.s)
             if sub.has_new_msg():
                 break
         # get whole-body state
         _t, _q, _v, _tau, _p, _pd, _f, _s = sub.get_state()
+        qdiff = pinocchio.difference(self.MODEL, q, _q)
+        mask = ~np.isnan(qdiff)
         self.assertEqual(self.t, _t, "Wrong time interval")
-        self.assertTrue(np.allclose(q, _q, atol=1e-9), "Wrong q")
+        self.assertTrue(np.allclose(qdiff[mask], np.zeros(self.MODEL.nv)[mask], atol=1e-9), "Wrong q")
         self.assertTrue(np.allclose(v, _v, atol=1e-9), "Wrong v")
         self.assertTrue(np.allclose(tau, _tau, atol=1e-9), "Wrong tau")
         for name in self.p:
@@ -152,31 +158,31 @@ class TestWholeBodyState(unittest.TestCase):
             )
 
     def test_communication_with_reduced_model(self):
-        model = pinocchio.buildSampleModelHumanoid()
-        locked_joints = ["larm_elbow_joint", "rarm_elbow_joint"]
-        qref = pinocchio.randomConfiguration(model)
+        qref = pinocchio.randomConfiguration(self.MODEL)
         reduced_model = pinocchio.buildReducedModel(
-            model, [model.getJointId(name) for name in locked_joints], qref
+            self.MODEL, [self.MODEL.getJointId(name) for name in self.LOCKED_JOINTS], qref
         )
         sub = WholeBodyStateRosSubscriber(
-            model, locked_joints, qref, "reduced_whole_body_state"
+            self.MODEL, self.LOCKED_JOINTS, qref, "reduced_whole_body_state"
         )
-        pub = WholeBodyStateRosPublisher(model, locked_joints, qref, "reduced_whole_body_state")
+        pub = WholeBodyStateRosPublisher(self.MODEL, self.LOCKED_JOINTS, qref, "reduced_whole_body_state")
         time.sleep(1)
         # publish whole-body state messages
-        q = pinocchio.randomConfiguration(model)
-        q[:3] = np.random.rand(3)
-        v = np.random.rand(model.nv)
-        tau = np.random.rand(model.nv - 6)
-        q, v, tau = toReduced(model, reduced_model, q, v, tau)
+        nv_root = getRootNv(self.MODEL)
+        q = pinocchio.randomConfiguration(self.MODEL)
+        v = np.random.rand(self.MODEL.nv)
+        tau = np.random.rand(self.MODEL.nv - nv_root)
+        q, v, tau = toReduced(self.MODEL, reduced_model, q, v, tau)
         while True:
             pub.publish(self.t, q, v, tau, self.p, self.pd, self.f, self.s)
             if sub.has_new_msg():
                 break
         # get whole-body state
         _t, _q, _v, _tau, _p, _pd, _f, _s = sub.get_state()
+        qdiff = pinocchio.difference(reduced_model, q, _q)
+        mask = ~np.isnan(qdiff)
         self.assertEqual(self.t, _t, "Wrong time interval")
-        self.assertTrue(np.allclose(q, _q, atol=1e-9), "Wrong q")
+        self.assertTrue(np.allclose(qdiff[mask], np.zeros(reduced_model.nv)[mask], atol=1e-9), "Wrong q")
         self.assertTrue(np.allclose(v, _v, atol=1e-9), "Wrong v")
         self.assertTrue(np.allclose(tau, _tau, atol=1e-9), "Wrong tau")
         for name in self.p:
@@ -210,31 +216,32 @@ class TestWholeBodyState(unittest.TestCase):
             )
 
     def test_communication_with_non_locked_joints(self):
-        model = pinocchio.buildSampleModelHumanoid()
         locked_joints = []
-        qref = pinocchio.randomConfiguration(model)
+        qref = pinocchio.randomConfiguration(self.MODEL)
         reduced_model = pinocchio.buildReducedModel(
-            model, [model.getJointId(name) for name in locked_joints], qref
+            self.MODEL, [self.MODEL.getJointId(name) for name in locked_joints], qref
         )
         sub = WholeBodyStateRosSubscriber(
-            model, locked_joints, qref, "non_locked_whole_body_state"
+            self.MODEL, locked_joints, qref, "non_locked_whole_body_state"
         )
-        pub = WholeBodyStateRosPublisher(model, locked_joints, qref, "non_locked_whole_body_state")
+        pub = WholeBodyStateRosPublisher(self.MODEL, locked_joints, qref, "non_locked_whole_body_state")
         time.sleep(1)
         # publish whole-body state messages
-        q = pinocchio.randomConfiguration(model)
-        q[:3] = np.random.rand(3)
-        v = np.random.rand(model.nv)
-        tau = np.random.rand(model.nv - 6)
-        q, v, tau = toReduced(model, reduced_model, q, v, tau)
+        nv_root = getRootNv(self.MODEL)
+        q = pinocchio.randomConfiguration(self.MODEL)
+        v = np.random.rand(self.MODEL.nv)
+        tau = np.random.rand(self.MODEL.nv - nv_root)
+        q, v, tau = toReduced(self.MODEL, reduced_model, q, v, tau)
         while True:
             pub.publish(self.t, q, v, tau, self.p, self.pd, self.f, self.s)
             if sub.has_new_msg():
                 break
         # get whole-body state
         _t, _q, _v, _tau, _p, _pd, _f, _s = sub.get_state()
+        qdiff = pinocchio.difference(reduced_model, q, _q)
+        mask = ~np.isnan(qdiff)
         self.assertEqual(self.t, _t, "Wrong time interval")
-        self.assertTrue(np.allclose(q, _q, atol=1e-9), "Wrong q")
+        self.assertTrue(np.allclose(qdiff[mask], np.zeros(reduced_model.nv)[mask], atol=1e-9), "Wrong q")
         self.assertTrue(np.allclose(v, _v, atol=1e-9), "Wrong v")
         self.assertTrue(np.allclose(tau, _tau, atol=1e-9), "Wrong tau")
         for name in self.p:
@@ -267,8 +274,29 @@ class TestWholeBodyState(unittest.TestCase):
                 S[1], _S[1], "Wrong contact friction coefficient at " + name
             )
 
+class SampleHumanoidTest(TestWholeBodyStateAbstract):
+    MODEL = pinocchio.buildSampleModelHumanoid()
+    LOCKED_JOINTS = ["larm_elbow_joint", "rarm_elbow_joint"]
+
+class SampleManipulatorTest(TestWholeBodyStateAbstract):
+    MODEL = pinocchio.buildSampleModelManipulator()
+    LOCKED_JOINTS = ["wrist1_joint", "wrist2_joint"]
+
 if __name__ == "__main__":
+    test_classes_to_run = [
+        SampleHumanoidTest,
+        SampleManipulatorTest,
+    ]
     if ROS_VERSION == 2:
-        unittest.main()
+        # test to be run
+        loader = unittest.TestLoader()
+        suites_list = []
+        for test_class in test_classes_to_run:
+            suite = loader.loadTestsFromTestCase(test_class)
+            suites_list.append(suite)
+        big_suite = unittest.TestSuite(suites_list)
+        runner = unittest.TextTestRunner()
+        results = runner.run(big_suite)
     else:
-        rosunit.unitrun("crocoddyl_msgs", "whole_body_state", TestWholeBodyState)
+        for test_class in test_classes_to_run:
+            rosunit.unitrun("crocoddyl_msgs", "whole_body_state", test_class)
