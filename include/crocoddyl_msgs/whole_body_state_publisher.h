@@ -192,9 +192,7 @@ public:
    */
   void update_body_inertial_parameters(
       const std::string &body_name,
-      const Eigen::Ref<const Eigen::VectorXd> &psi) {
-    unsigned int id = model_.getJointId(body_name);
-    model_.inertias[id] = inertia_tmp_.FromDynamicParameters(psi);
+    updateBodyInertialParameters(model_, body_name, psi);
   }
 
   /**
@@ -210,8 +208,7 @@ public:
    */
   const Eigen::VectorXd
   get_body_inertial_parameters(const std::string &body_name) const {
-    unsigned int id = model_.getJointId(body_name);
-    return model_.inertias[id].toDynamicParameters();
+    return getBodyInertialParameters(model_, body_name);
   }
 
 private:
