@@ -189,33 +189,37 @@ public:
   bool has_new_msg() const { return has_new_msg_; }
 
   /**
-   * @brief updates the inertial parameters of the pinocchio model
+   * @brief Update the Pinocchio model's inertial parameters of a given frame
    *
-   * @param body_name[in] name of the desired body to update the inertial
-   * parameters
-   * @param psi[in]       Vector containing the inertial parameters
    * The inertial parameters vector is defined as [m, h_x, h_y, h_z,
    * I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, I_{zz}]^T, where h=mc is
-   * the first moment of inertial m*COM and I has its origin in the
-   * frame, I = I_C + mS^T(c)S(c) and I_C has its origin at the barycenter
+   * the first moment of inertial (mass * barycenter) and the rotational
+   * inertia I = I_C + mS^T(c)S(c) where I_C has its origin at the
+   * barycenter. Additionally, the type of frame supported are joints,
+   * fixed joints, and bodies
+   *
+   * @param model[in]      Pinocchio model
+   * @param body_name[in] Body name
+   * @param psi[in]        Inertial parameters
    */
   void update_body_inertial_parameters(
       const std::string &body_name,
+      const Eigen::Ref<const Vector10d> &psi) {
     updateBodyInertialParameters(model_, body_name, psi);
   }
 
   /**
-   * @brief returns the inertial parameters of the pinocchio model
+   * @brief Return the Pinocchio model's inertial parameters of a given body frame
    *
-   * @param body_name[in] name of the desired body to get the inertial
-   * parameters
-   * @return psi[in]       Vector containing the inertial parameters
    * The inertial parameters vector is defined as [m, h_x, h_y, h_z,
    * I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, I_{zz}]^T, where h=mc is
-   * the first moment of inertial m*COM and I has its origin in the
-   * frame, I = I_C + mS^T(c)S(c) and I_C has its origin at the barycenter
+   * the first moment of inertial (mass * barycenter) and the rotational
+   * inertia I = I_C + mS^T(c)S(c) where I_C has its origin at the
+   * barycenter.
+   * 
+   * @param body_name[in]  Body name
    */
-  const Eigen::VectorXd
+  const Vector10d
   get_body_inertial_parameters(const std::string &body_name) const {
     return getBodyInertialParameters(model_, body_name);
   }

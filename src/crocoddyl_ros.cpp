@@ -213,23 +213,28 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
            py::arg("s") = DEFAULT_FRICTION)
       .def("update_body_inertial_parameters",
            &WholeBodyStateRosPublisher::update_body_inertial_parameters,
-           "Update the inertial parameters of the pinocchio model.\n\n"
-           ":param body_name: name of the desired body to update the inertial "
-           "parameters\n"
-           ":param psi: Vector containing the inertial parameters\n"
-           "The inertial parameters vector is defined as: \n"
-           "[m, h_x, h_y, h_z, I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, "
-           "I_{zz}]^T,\n where h=mc is the first moment of inertial"
-           "m*COM \n and I has its origin in the frame, \n I = I_C "
-           "+ mS^T(c)S(c) and I_C has its origin at the barycenter\n",
+           "Update the Pinocchio model's inertial parameters of a given body frame.\n\n"
+           "The inertial parameters vector is defined as [m, h_x, h_y, h_z,"
+           "I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, I_{zz}]^T, where h=mc is"
+           "the first moment of inertial (mass * barycenter) and the rotational"
+           "inertia I = I_C + mS^T(c)S(c) where I_C has its origin at the"
+           "barycenter. Additionally, the type of frame supported are joints,"
+           "fixed joints, and bodies.\n"
+           ":param body_name: body name\n"
+           ":param psi: inertial parameters",
            py::arg("body_name"), py::arg("psi"))
       .def("get_body_inertial_parameters",
            &WholeBodyStateRosPublisher::get_body_inertial_parameters,
-           "Returns the inertial parameters of the pinocchio model.\n\n"
-           ":param body_name: name of the desired body to get the inertial "
-           "parameters\n"
-           ":return psi: Vector containing the inertial parameters\n",
-           py::arg("body_name"));
+           "Return the Pinocchio model's inertial parameters of a given frame.\n\n"
+           "The inertial parameters vector is defined as [m, h_x, h_y, h_z,"
+           "I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, I_{zz}]^T, where h=mc is"
+           "the first moment of inertial (mass * barycenter) and the rotational"
+           "inertia I = I_C + mS^T(c)S(c) where I_C has its origin at the"
+           "barycenter. Additionally, the type of frame supported are joints,"
+           "fixed joints, and bodies.\n"
+           ":param model: Pinocchio model\n"
+           ":param body_name: body name\n"
+           ":return inertial parameters", py::arg("body_name"));
 
   py::class_<WholeBodyStateRosSubscriber,
              std::unique_ptr<WholeBodyStateRosSubscriber, py::nodelete>>(
@@ -255,23 +260,28 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
       .def("has_new_msg", &WholeBodyStateRosSubscriber::has_new_msg)
       .def("update_body_inertial_parameters",
            &WholeBodyStateRosSubscriber::update_body_inertial_parameters,
-           "Update the inertial parameters a given body.\n\n"
-           ":param body_name: name of the desired body to update the inertial "
-           "parameters\n"
-           ":param psi: Vector containing the inertial parameters\n"
-           "The inertial parameters vector is defined as: \n"
-           "[m, h_x, h_y, h_z, I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, "
-           "I_{zz}]^T,\n where h=mc is the first moment of inertial"
-           "m*COM \n and I has its origin in the frame, \n I = I_C "
-           "+ mS^T(c)S(c) and I_C has its origin at the barycenter\n",
+           "Update the Pinocchio model's inertial parameters of a given body frame.\n\n"
+           "The inertial parameters vector is defined as [m, h_x, h_y, h_z,"
+           "I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, I_{zz}]^T, where h=mc is"
+           "the first moment of inertial (mass * barycenter) and the rotational"
+           "inertia I = I_C + mS^T(c)S(c) where I_C has its origin at the"
+           "barycenter. Additionally, the type of frame supported are joints,"
+           "fixed joints, and bodies.\n"
+           ":param body_name: body name\n"
+           ":param psi: inertial parameters",
            py::arg("body_name"), py::arg("psi"))
       .def("get_body_inertial_parameters",
            &WholeBodyStateRosSubscriber::get_body_inertial_parameters,
-           "Return the inertial parameters of a given body.\n\n"
-           ":param body_name: name of the desired body to get the inertial "
-           "parameters\n"
-           ":return psi: Vector containing the inertial parameters\n",
-           py::arg("body_name"));
+           "Return the Pinocchio model's inertial parameters of a given frame.\n\n"
+           "The inertial parameters vector is defined as [m, h_x, h_y, h_z,"
+           "I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, I_{zz}]^T, where h=mc is"
+           "the first moment of inertial (mass * barycenter) and the rotational"
+           "inertia I = I_C + mS^T(c)S(c) where I_C has its origin at the"
+           "barycenter. Additionally, the type of frame supported are joints,"
+           "fixed joints, and bodies.\n"
+           ":param model: Pinocchio model\n"
+           ":param body_name: body name\n"
+           ":return inertial parameters", py::arg("body_name"));
 
   py::class_<WholeBodyTrajectoryRosPublisher,
              std::unique_ptr<WholeBodyTrajectoryRosPublisher, py::nodelete>>(
@@ -304,23 +314,27 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
            py::arg("ss") = DEFAULT_FRICTION_VECTOR)
       .def("update_body_inertial_parameters",
            &WholeBodyTrajectoryRosPublisher::update_body_inertial_parameters,
-           "Update the inertial parameters a given body.\n\n"
-           ":param body_name: name of the desired body to update the inertial "
-           "parameters\n"
-           ":param psi: Vector containing the inertial parameters\n"
-           "The inertial parameters vector is defined as: \n"
-           "[m, h_x, h_y, h_z, I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, "
-           "I_{zz}]^T,\n where h=mc is the first moment of inertial"
-           "m*COM \n and I has its origin in the frame, \n I = I_C "
-           "+ mS^T(c)S(c) and I_C has its origin at the barycenter\n",
+           "Update the Pinocchio model's inertial parameters of a given body frame.\n\n"
+           "The inertial parameters vector is defined as [m, h_x, h_y, h_z,"
+           "I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, I_{zz}]^T, where h=mc is"
+           "the first moment of inertial (mass * barycenter) and the rotational"
+           "inertia I = I_C + mS^T(c)S(c) where I_C has its origin at the"
+           "barycenter. Additionally, the type of frame supported are joints,"
+           "fixed joints, and bodies.\n"
+           ":param body_name: body name\n"
+           ":param psi: inertial parameters",
            py::arg("body_name"), py::arg("psi"))
       .def("get_body_inertial_parameters",
            &WholeBodyTrajectoryRosPublisher::get_body_inertial_parameters,
-           "Return the inertial parameters of a given body.\n\n"
-           ":param body_name: name of the desired body to get the inertial "
-           "parameters\n"
-           ":return psi: Vector containing the inertial parameters\n",
-           py::arg("body_name"));
+           "Return the Pinocchio model's inertial parameters of a given frame.\n\n"
+           "The inertial parameters vector is defined as [m, h_x, h_y, h_z,"
+           "I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, I_{zz}]^T, where h=mc is"
+           "the first moment of inertial (mass * barycenter) and the rotational"
+           "inertia I = I_C + mS^T(c)S(c) where I_C has its origin at the"
+           "barycenter. Additionally, the type of frame supported are joints,"
+           "fixed joints, and bodies.\n"
+           ":param body_name: body name\n"
+           ":return inertial parameters", py::arg("body_name"));
 
   py::class_<WholeBodyTrajectoryRosSubscriber,
              std::unique_ptr<WholeBodyTrajectoryRosSubscriber, py::nodelete>>(
@@ -347,23 +361,27 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
       .def("has_new_msg", &WholeBodyTrajectoryRosSubscriber::has_new_msg)
       .def("update_body_inertial_parameters",
            &WholeBodyTrajectoryRosSubscriber::update_body_inertial_parameters,
-           "Update the inertial parameters a given body.\n\n"
-           ":param body_name: name of the desired body to update the inertial "
-           "parameters\n"
-           ":param psi: Vector containing the inertial parameters\n"
-           "The inertial parameters vector is defined as: \n"
-           "[m, h_x, h_y, h_z, I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, "
-           "I_{zz}]^T,\n where h=mc is the first moment of inertial"
-           "m*COM \n and I has its origin in the frame, \n I = I_C "
-           "+ mS^T(c)S(c) and I_C has its origin at the barycenter\n",
+           "Update the Pinocchio model's inertial parameters of a given body frame.\n\n"
+           "The inertial parameters vector is defined as [m, h_x, h_y, h_z,"
+           "I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, I_{zz}]^T, where h=mc is"
+           "the first moment of inertial (mass * barycenter) and the rotational"
+           "inertia I = I_C + mS^T(c)S(c) where I_C has its origin at the"
+           "barycenter. Additionally, the type of frame supported are joints,"
+           "fixed joints, and bodies.\n"
+           ":param body_name: body name\n"
+           ":param psi: inertial parameters",
            py::arg("body_name"), py::arg("psi"))
       .def("get_body_inertial_parameters",
            &WholeBodyTrajectoryRosSubscriber::get_body_inertial_parameters,
-           "Return the inertial parameters of a given body.\n\n"
-           ":param body_name: name of the desired body to get the inertial "
-           "parameters\n"
-           ":return psi: Vector containing the inertial parameters\n",
-           py::arg("body_name"));
+           "Return the Pinocchio model's inertial parameters of a given frame.\n\n"
+           "The inertial parameters vector is defined as [m, h_x, h_y, h_z,"
+           "I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, I_{zz}]^T, where h=mc is"
+           "the first moment of inertial (mass * barycenter) and the rotational"
+           "inertia I = I_C + mS^T(c)S(c) where I_C has its origin at the"
+           "barycenter. Additionally, the type of frame supported are joints,"
+           "fixed joints, and bodies.\n"
+           ":param body_name: body name\n"
+           ":return inertial parameters", py::arg("body_name"));
 
   py::class_<
       MultibodyInertiaRosPublisher,
