@@ -68,16 +68,16 @@ public:
   ~MultibodyInertialParametersRosSubscriber() = default;
 
   /**
-   * @brief Get the latest inertial parameters
+   * @brief Get the latest inertial parameters of all bodies
    *
-   * @return  A map from body names to inertial parameters. The inertial
-   * parameters vector is defined as [m, h_x, h_y, h_z, I_{xx}, I_{xy}, I_{yy},
-   * I_{xz}, I_{yz}, I_{zz}]^T, where h=mc is the first moment of inertial m*COM
-   * and I has its origin in the frame, I = I_C + mS^T(c)S(c) and I_C has its
-   * origin at the barycenter
-   *
+   * The inertial parameters vector is defined as [m, h_x, h_y, h_z,
+   * I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, I_{zz}]^T, where h=mc is
+   * the first moment of inertial (mass * barycenter) and the rotational
+   * inertia I = I_C + mS^T(c)S(c) where I_C has its origin at the
+   * barycenter.
+   * 
+   * @return  A map from body names to inertial parameters.   *
    */
-
   std::map<std::string, Vector10d> get_parameters() {
     // start processing the message
     is_processing_msg_ = true;
@@ -85,17 +85,9 @@ public:
 
     const std::size_t n_bodies = msg_.parameters.size();
     for (std::size_t i = 0; i < n_bodies; ++i) {
-      psi_tmp_[0] = msg_.parameters[i].inertia.m;
-      psi_tmp_[1] = msg_.parameters[i].inertia.com.x * psi_tmp_[0];
-      psi_tmp_[2] = msg_.parameters[i].inertia.com.y * psi_tmp_[0];
-      psi_tmp_[3] = msg_.parameters[i].inertia.com.z * psi_tmp_[0];
-      psi_tmp_[4] = msg_.parameters[i].inertia.ixx;
-      psi_tmp_[5] = msg_.parameters[i].inertia.ixy;
-      psi_tmp_[6] = msg_.parameters[i].inertia.iyy;
-      psi_tmp_[7] = msg_.parameters[i].inertia.ixz;
-      psi_tmp_[8] = msg_.parameters[i].inertia.iyz;
-      psi_tmp_[9] = msg_.parameters[i].inertia.izz;
-      parameters_[msg_.parameters[i].name] = psi_tmp_;
+      const std::string &body_name = msg_.parameters[i].name;
+      fromMsg(msg_.parameters[i], psi_tmp_);
+      parameters_[body_name] = psi_tmp_;
     }
     // finish processing the message
     is_processing_msg_ = false;

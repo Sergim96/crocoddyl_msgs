@@ -11,7 +11,6 @@
 
 #include "crocoddyl_msgs/conversions.h"
 
-#include <algorithm>
 #include <realtime_tools/realtime_publisher.h>
 
 #ifdef ROS2
@@ -54,17 +53,16 @@ public:
   /**
    * @brief Publish a multi-body inertial parameters ROS message.
    *
-   * @param parameters[in]    multibody inertial parameters. The inertial
-   * parameters vector is defined as [m, h_x, h_y, h_z, I_{xx}, I_{xy},
-   I_{yy},
-   * I_{xz}, I_{yz}, I_{zz}]^T, where h=mc is the first moment of inertial
-   m*COM
-   * and I has its origin in the frame, I = I_C + mS^T(c)S(c) and I_C has its
-   * origin at the barycenter
+   * The inertial parameters vector is defined as [m, h_x, h_y, h_z,
+   * I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, I_{zz}]^T, where h=mc is
+   * the first moment of inertial (mass * barycenter) and the rotational
+   * inertia I = I_C + mS^T(c)S(c) where I_C has its origin at the
+   * barycenter.
+   * 
+   * @param parameters[in]  Multibody inertial parameters.
    */
   void publish(const std::map<std::string, const Eigen::Ref<const Vector10d>>
                    &parameters) {
-    const double eps = Eigen::NumTraits<double>::epsilon();
     const std::size_t n_bodies = parameters.size();
     pub_.msg_.parameters.resize(n_bodies);
 
@@ -76,20 +74,10 @@ public:
 #endif
       std::size_t i = 0;
       for (const auto &pair : parameters) {
-        const auto &body_name = pair.first; // The key of the map (string)
-        const auto &psi =
-            pair.second; // The value of the map (Eigen::Ref<const Vector10d>)
+        const auto &body_name = pair.first;
+        const auto &psi = pair.second;
         pub_.msg_.parameters[i].name = body_name;
-        pub_.msg_.parameters[i].inertia.m = psi[0];
-        pub_.msg_.parameters[i].inertia.com.x = psi[1] / std::max(psi[0], eps);
-        pub_.msg_.parameters[i].inertia.com.y = psi[2] / std::max(psi[0], eps);
-        pub_.msg_.parameters[i].inertia.com.z = psi[3] / std::max(psi[0], eps);
-        pub_.msg_.parameters[i].inertia.ixx = psi[4];
-        pub_.msg_.parameters[i].inertia.ixy = psi[5];
-        pub_.msg_.parameters[i].inertia.iyy = psi[6];
-        pub_.msg_.parameters[i].inertia.ixz = psi[7];
-        pub_.msg_.parameters[i].inertia.iyz = psi[8];
-        pub_.msg_.parameters[i].inertia.izz = psi[9];
+        toMsg(pub_.msg_.parameters[i], psi);
         ++i;
       }
       pub_.unlockAndPublish();

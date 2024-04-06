@@ -9,6 +9,7 @@
 #ifndef CONVERSIONS_H_
 #define CONVERSIONS_H_
 
+#include <algorithm>
 #include <pinocchio/fwd.hpp>
 
 #include <pinocchio/algorithm/center-of-mass.hpp>
@@ -65,6 +66,7 @@ typedef crocoddyl_msgs::msg::TimeInterval TimeInterval;
 typedef crocoddyl_msgs::msg::State State;
 typedef crocoddyl_msgs::msg::Control Control;
 typedef crocoddyl_msgs::msg::FeedbackGain FeedbackGain;
+typedef crocoddyl_msgs::msg::InertialParameters InertialParameters;
 typedef crocoddyl_msgs::msg::MultibodyInertialParameters
     MultibodyInertialParameters;
 typedef whole_body_state_msgs::msg::WholeBodyState WholeBodyState;
@@ -75,6 +77,7 @@ typedef crocoddyl_msgs::TimeInterval TimeInterval;
 typedef crocoddyl_msgs::State State;
 typedef crocoddyl_msgs::Control Control;
 typedef crocoddyl_msgs::FeedbackGain FeedbackGain;
+typedef crocoddyl_msgs::InertialParameters InertialParameters;
 typedef crocoddyl_msgs::MultibodyInertialParameters MultibodyInertialParameters;
 typedef whole_body_state_msgs::WholeBodyState WholeBodyState;
 typedef whole_body_state_msgs::WholeBodyTrajectory WholeBodyTrajectory;
@@ -303,6 +306,27 @@ static inline void toMsg(Control &msg,
     msg.parametrization = crocoddyl_msgs::Control::POLYTWO;
     break;
   }
+}
+
+/**
+ * @brief Conversion of Eigen to crocoddyl_msgs::InertialParameters message
+ *
+ * @param[out] msg  ROS message that contains the inertial parameters
+ * @param[in] psi   Inertial parameters
+ */
+static inline void toMsg(InertialParameters &msg,
+                         const Eigen::Ref<const Vector10d> &psi) {
+  const double eps = Eigen::NumTraits<double>::epsilon();
+  msg.inertia.m = psi[0];
+  msg.inertia.com.x = psi[1] / std::max(psi[0], eps);
+  msg.inertia.com.y = psi[2] / std::max(psi[0], eps);
+  msg.inertia.com.z = psi[3] / std::max(psi[0], eps);
+  msg.inertia.ixx = psi[4];
+  msg.inertia.ixy = psi[5];
+  msg.inertia.iyy = psi[6];
+  msg.inertia.ixz = psi[7];
+  msg.inertia.iyz = psi[8];
+  msg.inertia.izz = psi[9];
 }
 
 /**
@@ -630,6 +654,26 @@ static inline void fromMsg(const Control &msg, Eigen::Ref<Eigen::VectorXd> u,
   fromMsg(msg.gain, K);
   type = static_cast<ControlType>(msg.input);
   parametrization = static_cast<ControlParametrization>(msg.parametrization);
+}
+
+/**
+ * @brief Conversion of inertial parameters from a 
+ * crocoddyl_msgs::InertialParameters message to Eigen
+ *
+ * @param[in] msg   ROS message that contains the inertial parameters
+ * @param[out] psi  Inertial parameters
+ */
+static inline void fromMsg(const InertialParameters &msg, Eigen::Ref<Vector10d> psi) {
+  psi(0) = msg.inertia.m;
+  psi(1) = msg.inertia.com.x * psi(0);
+  psi(2) = msg.inertia.com.y * psi(0);
+  psi(3) = msg.inertia.com.z * psi(0);
+  psi(4) = msg.inertia.ixx;
+  psi(5) = msg.inertia.ixy;
+  psi(6) = msg.inertia.iyy;
+  psi(7) = msg.inertia.ixz;
+  psi(8) = msg.inertia.iyz;
+  psi(9) = msg.inertia.izz;
 }
 
 /**
