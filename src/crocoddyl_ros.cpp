@@ -415,6 +415,33 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
            ":param model: Pinocchio model\n"
            ":return root joint nv dimension");
 
+  m.def("updateBodyInertialParameters",
+           pinocchio::python::make_pybind11_function(&updateBodyInertialParameters<0, pinocchio::JointCollectionDefaultTpl>),
+           "Update the Pinocchio model's inertial parameters of a given frame.\n\n"
+           "The inertial parameters vector is defined as [m, h_x, h_y, h_z,"
+           "I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, I_{zz}]^T, where h=mc is"
+           "the first moment of inertial (mass * barycenter) and the rotational"
+           "inertia I = I_C + mS^T(c)S(c) where I_C has its origin at the"
+           "barycenter. Additionally, the type of frame supported are joints,"
+           "fixed joints, and bodies.\n"
+           ":param model: Pinocchio model\n"
+           ":param frame_name: frame name\n"
+           ":param psi: inertial parameters",
+           py::arg("model"), py::arg("frame_name"), py::arg("psi"));
+
+  m.def("getBodyInertialParameters", &getBodyInertialParameters<0, pinocchio::JointCollectionDefaultTpl>,
+           "Return the Pinocchio model's inertial parameters of a given frame.\n\n"
+           "The inertial parameters vector is defined as [m, h_x, h_y, h_z,"
+           "I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, I_{zz}]^T, where h=mc is"
+           "the first moment of inertial (mass * barycenter) and the rotational"
+           "inertia I = I_C + mS^T(c)S(c) where I_C has its origin at the"
+           "barycenter. Additionally, the type of frame supported are joints,"
+           "fixed joints, and bodies.\n"
+           ":param model: Pinocchio model\n"
+           ":param frame_name: frame name\n"
+           ":return inertial parameters",
+           py::arg("model"), py::arg("frame_name"));
+
   m.def(
       "fromReduced",
       &fromReduced_return<0, pinocchio::JointCollectionDefaultTpl>,

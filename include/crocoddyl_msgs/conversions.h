@@ -121,6 +121,111 @@ static inline std::size_t getRootNv(
 }
 
 /**
+ * @brief Update the Pinocchio model's inertial parameters of a given frame
+ *
+ * The inertial parameters vector is defined as [m, h_x, h_y, h_z,
+ * I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, I_{zz}]^T, where h=mc is
+ * the first moment of inertial (mass * barycenter) and the rotational
+ * inertia I = I_C + mS^T(c)S(c) where I_C has its origin at the
+ * barycenter. Additionally, the type of frame supported are joints,
+ * fixed joints, and bodies.
+ *
+ * @param model[in]      Pinocchio model
+ * @param frame_name[in] Frame name
+ * @param psi[in]        Inertial parameters
+ */
+template <int Options, template <typename, int> class JointCollectionTpl>
+void updateBodyInertialParameters(
+    pinocchio::ModelTpl<double, Options, JointCollectionTpl> &model,
+    const std::string &frame_name,
+    const Eigen::Ref<const Vector10d> &psi) {
+  if (model.existFrame(frame_name)) {
+    const std::size_t frame_id = model.getFrameId(frame_name);
+    switch (model.frames[frame_id].type) {
+      case pinocchio::FrameType::JOINT: {
+      const std::size_t joint_id = model.getJointId(frame_name);
+      model.inertias[joint_id] = pinocchio::Inertia::FromDynamicParameters(psi);
+      } break;
+      case pinocchio::FrameType::BODY: {
+//TODO: Update Pinocchio version after releasing https://github.com/stack-of-tasks/pinocchio/pull/2204
+#if (PINOCCHIO_MAJOR_VERSION >= 2 && PINOCCHIO_MINOR_VERSION >= 7 && PINOCCHIO_PATCH_VERSION >= 1)
+      const std::size_t fixed_joint_id = model.frames[frame_id].previousFrame;
+      const std::size_t joint_id = model.frames[fixed_joint_id].parent;
+      const pinocchio::SE3& jMb = model.frames[fixed_joint_id].placement;
+      const pinocchio::Inertia& I_updated = pinocchio::Inertia::FromDynamicParameters(psi);
+      const pinocchio::Inertia& dI = I_updated - model.frames[fixed_joint_id].inertia;
+      model.frames[fixed_joint_id].inertia = I_updated;
+      model.inertias[joint_id] += jMb.act(dI);
+#else
+      std::invalid_argument("The installed Pinocchio version doesn't support minus operators in inertia needed for " + frame_name);
+#endif
+      } break;
+      case pinocchio::FrameType::FIXED_JOINT: {
+#if (PINOCCHIO_MAJOR_VERSION >= 2 && PINOCCHIO_MINOR_VERSION >= 7 && PINOCCHIO_PATCH_VERSION >= 1)
+      const std::size_t joint_id = model.frames[frame_id].parent;
+      const pinocchio::SE3& jMb = model.frames[frame_id].placement;
+      const pinocchio::Inertia& I_updated = pinocchio::Inertia::FromDynamicParameters(psi);
+      const pinocchio::Inertia& dI = I_updated - model.frames[frame_id].inertia;
+      model.frames[frame_id].inertia = I_updated;
+      model.inertias[joint_id] += jMb.act(dI);
+#else
+      std::invalid_argument("The installed Pinocchio version doesn't support minus operators in inertia needed for " + frame_name);
+#endif
+      } break;
+      default: {
+        std::invalid_argument("The type of frame " + frame_name + " is not supported");
+        break;
+      }
+    }
+  } else {
+    std::invalid_argument("Doesn't exist " + frame_name + " frame");     
+  }
+}
+
+/**
+ * @brief Return the Pinocchio model's inertial parameters of a given frame
+ *
+ * The inertial parameters vector is defined as [m, h_x, h_y, h_z,
+ * I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, I_{zz}]^T, where h=mc is
+ * the first moment of inertial (mass * barycenter) and the rotational
+ * inertia I = I_C + mS^T(c)S(c) where I_C has its origin at the
+ * barycenter. Additionally, the type of frame supported are joints,
+ * fixed joints, and bodies
+ * 
+ * @param model[in]      Pinocchio model
+ * @param frame_name[in] Frame name
+ * @return inertial parameters.
+ */
+template <int Options, template <typename, int> class JointCollectionTpl>
+const Vector10d
+getBodyInertialParameters(
+    const pinocchio::ModelTpl<double, Options, JointCollectionTpl> &model,
+    const std::string &frame_name) {
+  if (model.existFrame(frame_name)) {
+    const std::size_t frame_id = model.getFrameId(frame_name);
+    switch (model.frames[frame_id].type) {
+      case pinocchio::FrameType::JOINT: {
+      const std::size_t joint_id = model.getJointId(frame_name);
+      return model.inertias[joint_id].toDynamicParameters();
+      } break;
+      case pinocchio::FrameType::BODY: {
+      const std::size_t fixed_joint_id = model.frames[frame_id].previousFrame;
+      return model.frames[fixed_joint_id].inertia.toDynamicParameters();
+      } break;
+      case pinocchio::FrameType::FIXED_JOINT: {
+      return model.frames[frame_id].inertia.toDynamicParameters();
+      } break;
+      default: {
+        std::invalid_argument("The type of frame " + frame_name + " is not supported");
+        break;
+      }
+    }
+  } else {
+    std::invalid_argument("Doesn't exist " + frame_name + " frame");     
+  }
+}
+
+/**
  * @brief Conversion of Eigen to message for a given
  * crocoddyl_msgs::FeedbackGain message reference
  *
