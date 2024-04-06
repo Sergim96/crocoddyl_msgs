@@ -334,7 +334,7 @@ class TestWholeBodyTrajectoryAbstract(unittest.TestCase):
         sub = WholeBodyTrajectoryRosSubscriber(self.MODEL, "whole_body_trajectory_update_model")
         pub = WholeBodyTrajectoryRosPublisher(self.MODEL, "whole_body_trajectory_update_model")
         time.sleep(1)
-        # publish whole-body state messages
+        # update inertia parameters
         if pinocchio.__version__ >= "2.7.1":
             frame_names = [f.name for f in self.MODEL.frames if f.name != "universe" and (f.type == pinocchio.BODY or f.type == pinocchio.JOINT or f.type == pinocchio.FIXED_JOINT)]
         else:
@@ -345,7 +345,7 @@ class TestWholeBodyTrajectoryAbstract(unittest.TestCase):
             new_parameters.append(psi)
             pub.update_body_inertial_parameters(name, psi)
             sub.update_body_inertial_parameters(name, psi)
-
+        # get inertias
         for i, name in enumerate(frame_names):
             pub_parameters = pub.get_body_inertial_parameters(name)
             sub_parameters = sub.get_body_inertial_parameters(name)
@@ -386,7 +386,7 @@ class TestWholeBodyTrajectoryAbstract(unittest.TestCase):
         sub = WholeBodyTrajectoryRosSubscriber(reduced_model, "whole_body_trajectory_update_model")
         pub = WholeBodyTrajectoryRosPublisher(reduced_model, "whole_body_trajectory_update_model")
         time.sleep(1)
-        # publish whole-body state messages
+        # update inertia parameters
         if pinocchio.__version__ >= "2.7.1":
             frame_names = [f.name for f in reduced_model.frames if f.name != "universe" and (f.type == pinocchio.BODY or f.type == pinocchio.JOINT or f.type == pinocchio.FIXED_JOINT)]
         else:
@@ -397,7 +397,7 @@ class TestWholeBodyTrajectoryAbstract(unittest.TestCase):
             new_parameters.append(psi)
             pub.update_body_inertial_parameters(name, psi)
             sub.update_body_inertial_parameters(name, psi)
-
+        # get inertias
         for i, name in enumerate(frame_names):
             pub_parameters = pub.get_body_inertial_parameters(name)
             sub_parameters = sub.get_body_inertial_parameters(name)
