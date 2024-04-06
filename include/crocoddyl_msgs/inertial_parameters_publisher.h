@@ -21,7 +21,7 @@
 
 namespace crocoddyl_msgs {
 
-class MultibodyInertialParametersRosPublisher {
+class MultibodyInertiaRosPublisher {
 public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
@@ -30,7 +30,7 @@ public:
    *
    * @param[in] topic  Topic name (default: "/crocoddyl/inertial_parameters")
    */
-  MultibodyInertialParametersRosPublisher(
+  MultibodyInertiaRosPublisher(
       const std::string &topic = "/crocoddyl/inertial_parameters")
 #ifdef ROS2
       : node_("inertial_parameters_publisher"),
@@ -48,7 +48,7 @@ public:
   }
 #endif
 
-  ~MultibodyInertialParametersRosPublisher() = default;
+  ~MultibodyInertiaRosPublisher() = default;
 
   /**
    * @brief Publish a multi-body inertial parameters ROS message.

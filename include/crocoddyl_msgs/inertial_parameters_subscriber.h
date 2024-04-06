@@ -26,7 +26,7 @@ typedef const crocoddyl_msgs::msg::MultibodyInertia::SharedPtr MultibodyInertiaS
 typedef const crocoddyl_msgs::MultibodyInertia::ConstPtr &MultibodyInertiaSharedPtr;
 #endif
 
-class MultibodyInertialParametersRosSubscriber {
+class MultibodyInertiaRosSubscriber {
 public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
@@ -35,13 +35,13 @@ public:
    *
    * @param[in] topic  Topic name (default: "/crocoddyl/inertial_parameters")
    */
-  MultibodyInertialParametersRosSubscriber(
+  MultibodyInertiaRosSubscriber(
       const std::string &topic = "/crocoddyl/inertial_parameters")
 #ifdef ROS2
       : node_(rclcpp::Node::make_shared("inertia_parameters_subscriber")),
         sub_(node_->create_subscription<MultibodyInertia>(
             topic, 1,
-            std::bind(&MultibodyInertialParametersRosSubscriber::callback, this,
+            std::bind(&MultibodyInertiaRosSubscriber::callback, this,
                       std::placeholders::_1))),
         has_new_msg_(false), is_processing_msg_(false), last_msg_time_(0.) {
     spinner_.add_node(node_);
@@ -55,7 +55,7 @@ public:
         last_msg_time_(0.) {
     ros::NodeHandle n;
     sub_ = n.subscribe<MultibodyInertia>(
-        topic, 1, &MultibodyInertialParametersRosSubscriber::callback, this,
+        topic, 1, &MultibodyInertiaRosSubscriber::callback, this,
         ros::TransportHints().tcpNoDelay());
     spinner_.start();
     ROS_INFO_STREAM("Subscribing MultibodyInertia messages on "
@@ -63,7 +63,7 @@ public:
 #endif
   }
 
-  ~MultibodyInertialParametersRosSubscriber() = default;
+  ~MultibodyInertiaRosSubscriber() = default;
 
   /**
    * @brief Get the latest inertial parameters of all bodies

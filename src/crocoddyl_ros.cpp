@@ -366,12 +366,12 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
            py::arg("body_name"));
 
   py::class_<
-      MultibodyInertialParametersRosPublisher,
-      std::unique_ptr<MultibodyInertialParametersRosPublisher, py::nodelete>>(
-      m, "MultibodyInertialParametersRosPublisher")
+      MultibodyInertiaRosPublisher,
+      std::unique_ptr<MultibodyInertiaRosPublisher, py::nodelete>>(
+      m, "MultibodyInertiaRosPublisher")
       .def(py::init<const std::string &>(),
            py::arg("topic") = "/crocoddyl/inertial_parameters")
-      .def("publish", &MultibodyInertialParametersRosPublisher::publish,
+      .def("publish", &MultibodyInertiaRosPublisher::publish,
            "Publish a multibody inertia ROS message.\n\n"
            "The inertial parameters vector is defined as [m, h_x, h_y, h_z,"
            "I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, I_{zz}]^T, where h=mc is"
@@ -382,13 +382,13 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
            py::arg("parameters"));
 
   py::class_<
-      MultibodyInertialParametersRosSubscriber,
-      std::unique_ptr<MultibodyInertialParametersRosSubscriber, py::nodelete>>(
-      m, "MultibodyInertialParametersRosSubscriber")
+      MultibodyInertiaRosSubscriber,
+      std::unique_ptr<MultibodyInertiaRosSubscriber, py::nodelete>>(
+      m, "MultibodyInertiaRosSubscriber")
       .def(py::init<const std::string &>(),
            py::arg("topic") = "/crocoddyl/inertial_parameters")
       .def("get_parameters",
-           &MultibodyInertialParametersRosSubscriber::get_parameters,
+           &MultibodyInertiaRosSubscriber::get_parameters,
            "Get the latest multibody inertial parameters.\n\n"
            "The inertial parameters vector is defined as [m, h_x, h_y, h_z,"
            "I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, I_{zz}]^T, where h=mc is"
@@ -397,7 +397,7 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
            "barycenter.\n"
            ":return: dictionary of body names and inertial parameters pair\n")
       .def("has_new_msg",
-           &MultibodyInertialParametersRosSubscriber::has_new_msg);
+           &MultibodyInertiaRosSubscriber::has_new_msg);
 
   m.def("getRootJointId",
         &getRootJointId<0, pinocchio::JointCollectionDefaultTpl>,

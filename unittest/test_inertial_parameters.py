@@ -24,8 +24,8 @@ else:
     import rosunit
 
 from crocoddyl_ros import (
-    MultibodyInertialParametersRosPublisher,
-    MultibodyInertialParametersRosSubscriber,
+    MultibodyInertiaRosPublisher,
+    MultibodyInertiaRosSubscriber,
 )
 
 
@@ -39,8 +39,8 @@ class TestInertialParametersAbstract(unittest.TestCase):
             rospy.init_node("crocoddyl_ros", anonymous=True)
 
     def test_communication(self):
-        pub = MultibodyInertialParametersRosPublisher("inertial_parameters")
-        sub = MultibodyInertialParametersRosSubscriber("inertial_parameters")
+        pub = MultibodyInertiaRosPublisher("inertial_parameters")
+        sub = MultibodyInertiaRosSubscriber("inertial_parameters")
         time.sleep(1)
         # create the name index
         parameters = {}
