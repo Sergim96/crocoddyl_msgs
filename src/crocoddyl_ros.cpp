@@ -32,8 +32,8 @@
 #include "crocoddyl_msgs/whole_body_state_subscriber.h"
 #include "crocoddyl_msgs/whole_body_trajectory_publisher.h"
 #include "crocoddyl_msgs/whole_body_trajectory_subscriber.h"
-#include "crocoddyl_msgs/inertial_parameters_publisher.h"
-#include "crocoddyl_msgs/inertial_parameters_subscriber.h"
+#include "crocoddyl_msgs/multibody_inertia_publisher.h"
+#include "crocoddyl_msgs/multibody_inertia_subscriber.h"
 
 PYBIND11_MODULE(crocoddyl_ros, m) {
   namespace py = pybind11;
