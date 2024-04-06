@@ -21,11 +21,9 @@
 namespace crocoddyl_msgs {
 
 #ifdef ROS2
-typedef const crocoddyl_msgs::msg::MultibodyInertialParameters::SharedPtr
-    MultibodyInertialParametersSharedPtr;
+typedef const crocoddyl_msgs::msg::MultibodyInertia::SharedPtr MultibodyInertiaSharedPtr;
 #else
-typedef const crocoddyl_msgs::MultibodyInertialParameters::ConstPtr
-    &MultibodyInertialParametersSharedPtr;
+typedef const crocoddyl_msgs::MultibodyInertia::ConstPtr &MultibodyInertiaSharedPtr;
 #endif
 
 class MultibodyInertialParametersRosSubscriber {
@@ -41,7 +39,7 @@ public:
       const std::string &topic = "/crocoddyl/inertial_parameters")
 #ifdef ROS2
       : node_(rclcpp::Node::make_shared("inertia_parameters_subscriber")),
-        sub_(node_->create_subscription<MultibodyInertialParameters>(
+        sub_(node_->create_subscription<MultibodyInertia>(
             topic, 1,
             std::bind(&MultibodyInertialParametersRosSubscriber::callback, this,
                       std::placeholders::_1))),
@@ -50,17 +48,17 @@ public:
     thread_ = std::thread([this]() { this->spin(); });
     thread_.detach();
     RCLCPP_INFO_STREAM(node_->get_logger(),
-                       "Subscribing MultibodyInertialParameters messages on "
+                       "Subscribing MultibodyInertia messages on "
                            << topic);
 #else
       : spinner_(2), has_new_msg_(false), is_processing_msg_(false),
         last_msg_time_(0.) {
     ros::NodeHandle n;
-    sub_ = n.subscribe<MultibodyInertialParameters>(
+    sub_ = n.subscribe<MultibodyInertia>(
         topic, 1, &MultibodyInertialParametersRosSubscriber::callback, this,
         ros::TransportHints().tcpNoDelay());
     spinner_.start();
-    ROS_INFO_STREAM("Subscribing MultibodyInertialParameters messages on "
+    ROS_INFO_STREAM("Subscribing MultibodyInertia messages on "
                     << topic);
 #endif
   }
@@ -83,10 +81,10 @@ public:
     is_processing_msg_ = true;
     std::lock_guard<std::mutex> guard(mutex_);
 
-    const std::size_t n_bodies = msg_.parameters.size();
+    const std::size_t n_bodies = msg_.bodies.size();
     for (std::size_t i = 0; i < n_bodies; ++i) {
-      const std::string &body_name = msg_.parameters[i].name;
-      fromMsg(msg_.parameters[i], psi_tmp_);
+      const std::string &body_name = msg_.bodies[i].name;
+      fromMsg(msg_.bodies[i], psi_tmp_);
       parameters_[body_name] = psi_tmp_;
     }
     // finish processing the message
@@ -106,7 +104,7 @@ private:
   rclcpp::executors::SingleThreadedExecutor spinner_;
   std::thread thread_;
   void spin() { spinner_.spin(); }
-  rclcpp::Subscription<MultibodyInertialParameters>::SharedPtr
+  rclcpp::Subscription<MultibodyInertia>::SharedPtr
       sub_; //!< ROS subscriber
 #else
   ros::NodeHandle node_;
@@ -114,7 +112,7 @@ private:
   ros::Subscriber sub_; //!< ROS subscriber
 #endif
   std::mutex mutex_; ///< Mutex to prevent race condition on callback
-  MultibodyInertialParameters msg_; //!< ROS message
+  MultibodyInertia msg_; //!< ROS message
 
   bool has_new_msg_;       //!< Indcate when a new message has been received
   bool is_processing_msg_; //!< Indicate when we are processing the message
@@ -123,7 +121,7 @@ private:
   Vector10d psi_tmp_;
   std::map<std::string, Vector10d> parameters_;
 
-  void callback(MultibodyInertialParametersSharedPtr msg) {
+  void callback(MultibodyInertiaSharedPtr msg) {
     if (!is_processing_msg_) {
 #ifdef ROS2
       double t = rclcpp::Time(msg->header.stamp).seconds();

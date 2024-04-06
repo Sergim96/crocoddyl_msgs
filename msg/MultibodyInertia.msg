@@ -9,4 +9,4 @@
 std_msgs/Header header
 
 # The inertia of multiple bodies
-crocoddyl_msgs/InertialParameters[] parameters
+crocoddyl_msgs/BodyInertia[] bodies

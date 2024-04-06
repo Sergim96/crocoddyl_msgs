@@ -40,7 +40,7 @@
 #else
 #include "crocoddyl_msgs/Control.h"
 #include "crocoddyl_msgs/FeedbackGain.h"
-#include "crocoddyl_msgs/MultibodyInertialParameters.h"
+#include "crocoddyl_msgs/MultibodyInertia.h"
 #include "crocoddyl_msgs/State.h"
 #include "crocoddyl_msgs/TimeInterval.h"
 #include <whole_body_state_msgs/WholeBodyState.h>
@@ -66,9 +66,8 @@ typedef crocoddyl_msgs::msg::TimeInterval TimeInterval;
 typedef crocoddyl_msgs::msg::State State;
 typedef crocoddyl_msgs::msg::Control Control;
 typedef crocoddyl_msgs::msg::FeedbackGain FeedbackGain;
-typedef crocoddyl_msgs::msg::InertialParameters InertialParameters;
-typedef crocoddyl_msgs::msg::MultibodyInertialParameters
-    MultibodyInertialParameters;
+typedef crocoddyl_msgs::msg::BodyInertia BodyInertia;
+typedef crocoddyl_msgs::msg::MultibodyInertia MultibodyInertia;
 typedef whole_body_state_msgs::msg::WholeBodyState WholeBodyState;
 typedef whole_body_state_msgs::msg::WholeBodyTrajectory WholeBodyTrajectory;
 typedef whole_body_state_msgs::msg::ContactState ContactState;
@@ -77,8 +76,8 @@ typedef crocoddyl_msgs::TimeInterval TimeInterval;
 typedef crocoddyl_msgs::State State;
 typedef crocoddyl_msgs::Control Control;
 typedef crocoddyl_msgs::FeedbackGain FeedbackGain;
-typedef crocoddyl_msgs::InertialParameters InertialParameters;
-typedef crocoddyl_msgs::MultibodyInertialParameters MultibodyInertialParameters;
+typedef crocoddyl_msgs::BodyInertia BodyInertia;
+typedef crocoddyl_msgs::MultibodyInertia MultibodyInertia;
 typedef whole_body_state_msgs::WholeBodyState WholeBodyState;
 typedef whole_body_state_msgs::WholeBodyTrajectory WholeBodyTrajectory;
 typedef whole_body_state_msgs::ContactState ContactState;
@@ -309,12 +308,12 @@ static inline void toMsg(Control &msg,
 }
 
 /**
- * @brief Conversion of Eigen to crocoddyl_msgs::InertialParameters message
+ * @brief Conversion of Eigen to crocoddyl_msgs::BodyInertia message
  *
  * @param[out] msg  ROS message that contains the inertial parameters
  * @param[in] psi   Inertial parameters
  */
-static inline void toMsg(InertialParameters &msg,
+static inline void toMsg(BodyInertia &msg,
                          const Eigen::Ref<const Vector10d> &psi) {
   const double eps = Eigen::NumTraits<double>::epsilon();
   msg.inertia.m = psi[0];
@@ -658,12 +657,12 @@ static inline void fromMsg(const Control &msg, Eigen::Ref<Eigen::VectorXd> u,
 
 /**
  * @brief Conversion of inertial parameters from a 
- * crocoddyl_msgs::InertialParameters message to Eigen
+ * crocoddyl_msgs::BodyInertia message to Eigen
  *
  * @param[in] msg   ROS message that contains the inertial parameters
  * @param[out] psi  Inertial parameters
  */
-static inline void fromMsg(const InertialParameters &msg, Eigen::Ref<Vector10d> psi) {
+static inline void fromMsg(const BodyInertia &msg, Eigen::Ref<Vector10d> psi) {
   psi(0) = msg.inertia.m;
   psi(1) = msg.inertia.com.x * psi(0);
   psi(2) = msg.inertia.com.y * psi(0);

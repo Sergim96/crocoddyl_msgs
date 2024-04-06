@@ -373,12 +373,12 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
            py::arg("topic") = "/crocoddyl/inertial_parameters")
       .def("publish", &MultibodyInertialParametersRosPublisher::publish,
            "Publish a multibody inertia ROS message.\n\n"
-           ":param parameters: multibody inertial parameters\n"
-           "The inertial parameters vector is defined as: \n"
-           "[m, h_x, h_y, h_z, I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, "
-           "I_{zz}]^T,\n where h=mc is the first moment of inertial"
-           "m*COM \n and I has its origin in the frame, \n I = I_C "
-           "+ mS^T(c)S(c) and I_C has its origin at the barycenter\n",
+           "The inertial parameters vector is defined as [m, h_x, h_y, h_z,"
+           "I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, I_{zz}]^T, where h=mc is"
+           "the first moment of inertial (mass * barycenter) and the rotational"
+           "inertia I = I_C + mS^T(c)S(c) where I_C has its origin at the"
+           "barycenter.\n"
+           ":param parameters: multibody inertial parameters\n",
            py::arg("parameters"));
 
   py::class_<
@@ -390,12 +390,12 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
       .def("get_parameters",
            &MultibodyInertialParametersRosSubscriber::get_parameters,
            "Get the latest multibody inertial parameters.\n\n"
-           ":return: dictionary of body names and inertial parameters pair\n"
-           "The inertial parameters vector is defined as: \n"
-           "[m, h_x, h_y, h_z, I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, "
-           "I_{zz}]^T,\n where h=mc is the first moment of inertial"
-           "m*COM \n and I has its origin in the frame, \n I = I_C "
-           "+ mS^T(c)S(c) and I_C has its origin at the barycenter\n")
+           "The inertial parameters vector is defined as [m, h_x, h_y, h_z,"
+           "I_{xx}, I_{xy}, I_{yy}, I_{xz}, I_{yz}, I_{zz}]^T, where h=mc is"
+           "the first moment of inertial (mass * barycenter) and the rotational"
+           "inertia I = I_C + mS^T(c)S(c) where I_C has its origin at the"
+           "barycenter.\n"
+           ":return: dictionary of body names and inertial parameters pair\n")
       .def("has_new_msg",
            &MultibodyInertialParametersRosSubscriber::has_new_msg);
 

@@ -34,16 +34,16 @@ public:
       const std::string &topic = "/crocoddyl/inertial_parameters")
 #ifdef ROS2
       : node_("inertial_parameters_publisher"),
-        pub_(node_.create_publisher<MultibodyInertialParameters>(topic, 1)) {
+        pub_(node_.create_publisher<MultibodyInertia>(topic, 1)) {
     RCLCPP_INFO_STREAM(node_.get_logger(),
-                       "Publishing MultibodyInertialParameters messages on "
+                       "Publishing MultibodyInertia messages on "
                            << topic);
   }
 #else
   {
     ros::NodeHandle n;
     pub_.init(n, topic, 1);
-    ROS_INFO_STREAM("Publishing MultibodyInertialParameters messages on "
+    ROS_INFO_STREAM("Publishing MultibodyInertia messages on "
                     << topic);
   }
 #endif
@@ -64,7 +64,7 @@ public:
   void publish(const std::map<std::string, const Eigen::Ref<const Vector10d>>
                    &parameters) {
     const std::size_t n_bodies = parameters.size();
-    pub_.msg_.parameters.resize(n_bodies);
+    pub_.msg_.bodies.resize(n_bodies);
 
     if (pub_.trylock()) {
 #ifdef ROS2
@@ -76,8 +76,8 @@ public:
       for (const auto &pair : parameters) {
         const auto &body_name = pair.first;
         const auto &psi = pair.second;
-        pub_.msg_.parameters[i].name = body_name;
-        toMsg(pub_.msg_.parameters[i], psi);
+        pub_.msg_.bodies[i].name = body_name;
+        toMsg(pub_.msg_.bodies[i], psi);
         ++i;
       }
       pub_.unlockAndPublish();
@@ -88,7 +88,7 @@ private:
 #ifdef ROS2
   rclcpp::Node node_;
 #endif
-  realtime_tools::RealtimePublisher<MultibodyInertialParameters> pub_;
+  realtime_tools::RealtimePublisher<MultibodyInertia> pub_;
 };
 
 } // namespace crocoddyl_msgs
