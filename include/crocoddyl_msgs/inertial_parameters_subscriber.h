@@ -1,7 +1,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 // BSD 3-Clause License
 //
-// Copyright (C) 2020-2024, Heriot-Watt University, University of Oxford
+// Copyright (C) 2023-2024, Heriot-Watt University
 // Copyright note valid unless otherwise stated in individual files.
 // All rights reserved.
 ///////////////////////////////////////////////////////////////////////////////
@@ -27,8 +27,6 @@ typedef const crocoddyl_msgs::msg::MultibodyInertialParameters::SharedPtr
 typedef const crocoddyl_msgs::MultibodyInertialParameters::ConstPtr
     &MultibodyInertialParametersSharedPtr;
 #endif
-
-typedef Eigen::Matrix<double, 10, 1> Vector10d;
 
 class MultibodyInertialParametersRosSubscriber {
 public:

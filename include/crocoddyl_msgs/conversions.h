@@ -48,6 +48,8 @@
 
 namespace crocoddyl_msgs {
 
+typedef Eigen::Matrix<double, 10, 1> Vector10d;
+
 static std::vector<std::string> DEFAULT_VECTOR;
 
 enum ControlType { EFFORT = 0, ACCELERATION_CONTACTFORCE };

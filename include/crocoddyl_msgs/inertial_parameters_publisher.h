@@ -11,6 +11,7 @@
 
 #include "crocoddyl_msgs/conversions.h"
 
+#include <algorithm>
 #include <realtime_tools/realtime_publisher.h>
 
 #ifdef ROS2
@@ -24,7 +25,7 @@ namespace crocoddyl_msgs {
 class MultibodyInertialParametersRosPublisher {
 public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-  typedef Eigen::Matrix<double, 10, 1> Vector10d;
+
   /**
    * @brief Initialize the multi-body inertial parameters publisher.
    *
@@ -63,6 +64,7 @@ public:
    */
   void publish(const std::map<std::string, const Eigen::Ref<const Vector10d>>
                    &parameters) {
+    const double eps = Eigen::NumTraits<double>::epsilon();
     const std::size_t n_bodies = parameters.size();
     pub_.msg_.parameters.resize(n_bodies);
 
@@ -72,23 +74,23 @@ public:
 #else
       pub_.msg_.header.stamp = ros::Time::now();
 #endif
-      unsigned int i = 0;
+      std::size_t i = 0;
       for (const auto &pair : parameters) {
         const auto &body_name = pair.first; // The key of the map (string)
         const auto &psi =
             pair.second; // The value of the map (Eigen::Ref<const Vector10d>)
         pub_.msg_.parameters[i].name = body_name;
         pub_.msg_.parameters[i].inertia.m = psi[0];
-        pub_.msg_.parameters[i].inertia.com.x = psi[1] / psi[0];
-        pub_.msg_.parameters[i].inertia.com.y = psi[2] / psi[0];
-        pub_.msg_.parameters[i].inertia.com.z = psi[3] / psi[0];
+        pub_.msg_.parameters[i].inertia.com.x = psi[1] / std::max(psi[0], eps);
+        pub_.msg_.parameters[i].inertia.com.y = psi[2] / std::max(psi[0], eps);
+        pub_.msg_.parameters[i].inertia.com.z = psi[3] / std::max(psi[0], eps);
         pub_.msg_.parameters[i].inertia.ixx = psi[4];
         pub_.msg_.parameters[i].inertia.ixy = psi[5];
         pub_.msg_.parameters[i].inertia.iyy = psi[6];
         pub_.msg_.parameters[i].inertia.ixz = psi[7];
         pub_.msg_.parameters[i].inertia.iyz = psi[8];
         pub_.msg_.parameters[i].inertia.izz = psi[9];
-        i++;
+        ++i;
       }
       pub_.unlockAndPublish();
     }
