@@ -144,8 +144,37 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
            "interval, its durations, initial state, state's rate of change,\n"
            "feed-forward control, feedback gain, type of control and control\n"
            "parametrization.")
-      .def("has_new_msg", &SolverTrajectoryRosSubscriber::has_new_msg);
-
+      .def("has_new_msg", &SolverTrajectoryRosSubscriber::has_new_msg)
+      .def("get_communication_delay",
+           &SolverTrajectoryRosSubscriber::get_communication_delay,
+           "Get the most recently measured communication delay between sender "
+           "and subscriber.\n\n"
+           ":return: Communication delay in seconds (float).")
+      .def("process_queue", &SolverTrajectoryRosSubscriber::process_queue,
+           "Check if the next trajectory point is ready for execution.\n\n"
+           "If a new message has been received, this function processes it and "
+           "updates the "
+           "internal execution queue. It handles merging, appending, or "
+           "discarding data "
+           "depending on the temporal relation between the new and current "
+           "trajectories.\n\n"
+           ":return: True if the front of the queue is ready for execution, "
+           "False otherwise.")
+      .def("get_current_reference",
+           &SolverTrajectoryRosSubscriber::get_current_reference,
+           "Retrieve the next reference point that is ready for execution.\n\n"
+           "This method returns the earliest point in the internal queue that "
+           "is ready, "
+           "based on the system clock adjusted for communication delay. If the "
+           "front element "
+           "is expired, it is skipped. Should only be called after confirming "
+           "readiness "
+           "via `process_queue()`.\n\n"
+           ":return: Tuple (t, dt, x, dx, u, K, control_type, "
+           "control_parametrization)\n"
+           ":rtype: (float, float, np.ndarray, np.ndarray, np.ndarray, "
+           "np.ndarray, int, object)\n\n"
+           ":raises RuntimeError: If the queue is empty or no point is ready.");
   py::class_<WholeBodyStateRosPublisher,
              std::unique_ptr<WholeBodyStateRosPublisher, py::nodelete>>(
       m, "WholeBodyStateRosPublisher")

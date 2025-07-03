@@ -197,6 +197,8 @@ public:
   void update_body_inertial_parameters(const std::string &body_name,
                                        const Eigen::Ref<const Vector10d> &psi) {
     updateBodyInertialParameters(model_, body_name, psi);
+    if (is_reduced_model_)
+      updateBodyInertialParameters(reduced_model_, body_name, psi);
   }
 
   /**
