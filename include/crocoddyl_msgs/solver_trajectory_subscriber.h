@@ -163,19 +163,17 @@ public:
              crocoddyl_msgs::ControlParametrization>
   get_current_reference() {
 #ifdef ROS2
-    double now = node_->get_clock()->now().seconds();
+    const double now = node_->get_clock()->now().seconds();
 #else
-    double now = ros::Time::now().toSec();
+    const double now = ros::Time::now().toSec();
 #endif
 
     if (ts_queue_.empty()) {
       throw std::runtime_error("Reference queue is empty.");
     }
-
-    double t0 = ts_queue_.front();
-    double dt0 = dts_queue_.front();
-    double t_now = now - communication_delay_;
-
+    const double t0 = ts_queue_.front();
+    const double dt0 = dts_queue_.front();
+    const double t_now = now - communication_delay_;
     // Handle the case of only one element and it's too old
     if (ts_queue_.size() == 1 && t_now > t0 + dt0) {
       ts_queue_.clear();
@@ -190,7 +188,6 @@ public:
           "[SolverTrajectoryRosSubscriber::get_current_reference] "
           "Single remaining point is too old. Queue cleared.");
     }
-
     // Check if the first reference is ready
     if (t0 <= t_now) {
       // Check if the next one is also ready
@@ -234,25 +231,26 @@ public:
    *
    * 1. **Reject Old Message:**
    *    If the new message starts significantly earlier than the current queue
-   *    (i.e. `t0_new + delay < t0_current`), it is rejected. This guards
-   * against receiving stale messages that are out of date.
+   *    (i.e., `t0_new + delay < t0_current`), it is rejected. This guards
+   *    against receiving stale messages that are out of date.
    *
    * 2. **Replace (Same Start Time):**
    *    If the new message starts at approximately the same time as the current
-   * queue (within `communication_delay_`), the entire queue is cleared and
-   * replaced with the new one. This models re-planning from the same initial
-   * state.
+   *    queue (within `communication_delay_`), the entire queue is cleared and
+   *    replaced with the new one. This models re-planning from the same initial
+   *    state.
    *
    * 3. **Append (Starts After Current Ends):**
    *    If the new message starts after the current trajectory has finished
-   * executing (i.e. `tN_current + delay < t0_new`), the new message is appended
-   * to the end of the queue. This allows smooth extension of the current plan.
+   *    executing (i.e., `tN_current + delay < t0_new`), the new message is
+   * appended to the end of the queue. This allows smooth extension of the
+   * current plan.
    *
    * 4. **Merge (Partial Overlap):**
    *    If the new message overlaps partially with the current queue, the prefix
-   * of the current queue up to `t0_new + delay` is preserved and the new
-   * message is appended after that. This allows partial updates to a trajectory
-   * in progress.
+   *    of the current queue up to `t0_new + delay` is preserved and the new
+   *    message is appended after that. This allows partial updates to a
+   * trajectory in progress.
    *
    * After any processing, the method checks whether the front of the queue is
    * ready to be executed by comparing its timestamp (adjusted for communication
@@ -262,15 +260,13 @@ public:
    * @return True if a reference in the queue is ready to be executed; False
    * otherwise.
    */
-
   bool process_queue() {
 #ifdef ROS2
-    double now = node_->get_clock()->now().seconds();
+    const double now = node_->get_clock()->now().seconds();
 #else
-    double now = ros::Time::now().toSec();
+    const double now = ros::Time::now().toSec();
 #endif
-    double t_now = now - communication_delay_;
-
+    const double t_now = now - communication_delay_;
     // STEP 1: Handle new message if available
     if (has_new_msg_) {
       const auto &[ts_new, dts_new, xs_new, dxs_new, us_new, Ks_new, types_new,
@@ -280,12 +276,10 @@ public:
         throw std::runtime_error("[SolverTrajectoryRosSubscriber::process_"
                                  "queue] Received empty trajectory.");
       }
-
-      double t0_new = ts_new.front();
-      double t0_cur = ts_queue_.empty() ? t0_new : ts_queue_.front();
-      double tN_cur =
+      const double t0_new = ts_new.front();
+      const double t0_cur = ts_queue_.empty() ? t0_new : ts_queue_.front();
+      const double tN_cur =
           ts_queue_.empty() ? t0_new : ts_queue_.back() + dts_queue_.back();
-
       // Reject if new message is older than current queue (t0_new << t0_cur)
       if (!ts_queue_.empty() &&
           t0_new + communication_delay_ < ts_queue_.front()) {
@@ -300,6 +294,8 @@ public:
           return false;
         }
       }
+      // Replace current queue if new message starts at the same time
+      // (within communication delay)
       if (std::abs(t0_new - t0_cur) < communication_delay_) {
         ts_queue_.clear();
         dts_queue_.clear();
@@ -319,7 +315,7 @@ public:
           types_queue_.push_back(types_new[i]);
           params_queue_.push_back(params_new[i]);
         }
-
+        // Append new message if it starts after current queue ends
       } else if (tN_cur + communication_delay_ < t0_new) {
         for (std::size_t i = 0; i < ts_new.size(); ++i) {
           ts_queue_.push_back(ts_new[i]);
@@ -331,6 +327,7 @@ public:
           types_queue_.push_back(types_new[i]);
           params_queue_.push_back(params_new[i]);
         }
+        // Merge new message with current queue if it partially overlaps
       } else {
         std::deque<double> ts_merged;
         std::deque<double> dts_merged;
@@ -340,7 +337,6 @@ public:
         std::deque<Eigen::MatrixXd> Ks_merged;
         std::deque<crocoddyl_msgs::ControlType> types_merged;
         std::deque<crocoddyl_msgs::ControlParametrization> params_merged;
-
         // Preserve valid portion of current queue (before t0_new + delay)
         for (std::size_t i = 0; i < ts_queue_.size(); ++i) {
           if (ts_queue_[i] < t0_new + communication_delay_) {
@@ -356,7 +352,6 @@ public:
             break;
           }
         }
-
         // Append new message after preserved section
         for (std::size_t i = 0; i < ts_new.size(); ++i) {
           ts_merged.push_back(ts_new[i]);
@@ -368,7 +363,6 @@ public:
           types_merged.push_back(types_new[i]);
           params_merged.push_back(params_new[i]);
         }
-
         std::swap(ts_queue_, ts_merged);
         std::swap(dts_queue_, dts_merged);
         std::swap(xs_queue_, xs_merged);
@@ -379,9 +373,9 @@ public:
         std::swap(params_queue_, params_merged);
       }
     }
-
     // STEP 2: Determine if queue has a reference ready for execution
-    while (ts_queue_.size() >= 2 && ts_queue_.front() + dts_queue_.front() <= t_now) {
+    while (ts_queue_.size() >= 2 &&
+           ts_queue_.front() + dts_queue_.front() <= t_now) {
       ts_queue_.pop_front();
       dts_queue_.pop_front();
       xs_queue_.pop_front();
@@ -391,7 +385,6 @@ public:
       types_queue_.pop_front();
       params_queue_.pop_front();
     }
-
     // Now check the head entry
     if (!ts_queue_.empty() && ts_queue_.front() <= t_now &&
         t_now <= ts_queue_.front() + dts_queue_.front()) {
@@ -450,11 +443,11 @@ private:
   void callback(SolverTrajectorySharedPtr msg) {
     if (!is_processing_msg_) {
 #ifdef ROS2
-      double msg_time = rclcpp::Time(msg->header.stamp).seconds();
-      double now = node_->get_clock()->now().seconds();
+      const double msg_time = rclcpp::Time(msg->header.stamp).seconds();
+      const double now = node_->get_clock()->now().seconds();
 #else
-      double msg_time = msg->header.stamp.toSec();
-      double now = ros::Time::now().toSec();
+      const double msg_time = msg->header.stamp.toSec();
+      const double now = ros::Time::now().toSec();
 #endif
       communication_delay_ = now - msg_time;
       if (last_msg_time_ <= msg_time) {

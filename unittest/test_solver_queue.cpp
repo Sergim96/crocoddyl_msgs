@@ -35,19 +35,19 @@ struct TestFixture : public ::testing::Test {
              std::vector<Eigen::VectorXd>, std::vector<Eigen::VectorXd>,
              std::vector<Eigen::VectorXd>, std::vector<Eigen::MatrixXd>,
              std::vector<ControlType>, std::vector<ControlParametrization>>
-  build_msg(double t0 = 0.0) {
+  build_msg(const double t0 = 0.0) {
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_real_distribution<> dur_dist(0.1, 0.2);
     std::uniform_int_distribution<> N_dist(20, 40);
     std::uniform_int_distribution<> dim_dist(4, 20);
 
-    double h = dur_dist(gen);
-    int N = N_dist(gen);
+    const double h = dur_dist(gen);
+    const int N = N_dist(gen);
     std::vector<double> dts(N, h);
     std::vector<double> ts(N);
-    int nx = dim_dist(gen);
-    int nu = std::min(nx, dim_dist(gen));
+    const int nx = dim_dist(gen);
+    const int nu = std::min(nx, dim_dist(gen));
 
     for (int i = 0; i < N; ++i) ts[i] = t0 + i * h;
 
@@ -69,7 +69,7 @@ struct TestFixture : public ::testing::Test {
 // Verifies that if a trajectory starts in the future, process_queue() returns false until the time is reached.
 TEST_F(TestFixture, TestGetCurrentReferenceDelayed) {
   ros::Duration(1.0).sleep();
-  double t0 = ros::Time::now().toSec() + 10;
+  const double t0 = ros::Time::now().toSec() + 10;
   auto [ts, dts, xs, dxs, us, Ks, types, params] = build_msg(t0);
   while (!sub.has_new_msg()) pub.publish(ts, dts, xs, dxs, us, Ks, types, params);
   ASSERT_FALSE(sub.process_queue());
@@ -86,7 +86,7 @@ TEST_F(TestFixture, TestQueueEmptyRaises) {
 
 // Verifies correct behavior when all queue entries are exhausted, including proper time-based transitions and clearing.
 TEST_F(TestFixture, TestQueueExhaustion) {
-  double t0 = ros::Time::now().toSec();
+  const double t0 = ros::Time::now().toSec();
   auto [ts, dts, xs, dxs, us, Ks, types, params] = build_msg(t0);
   while (!sub.has_new_msg()){
     pub.publish(ts, dts, xs, dxs, us, Ks, types, params);
@@ -95,7 +95,7 @@ TEST_F(TestFixture, TestQueueExhaustion) {
 
   size_t N = ts.size();
   while (ros::Time::now().toSec() < ts.back() + 1.0) {
-    double t_now = ros::Time::now().toSec() - sub.get_communication_delay();
+    const double t_now = ros::Time::now().toSec() - sub.get_communication_delay();
     if (t_now < ts.front() + 1e-6) {
       ASSERT_FALSE(sub.process_queue());
       ASSERT_THROW(sub.get_current_reference(), std::runtime_error);
@@ -123,7 +123,7 @@ TEST_F(TestFixture, TestQueueExhaustion) {
 
 // Verifies that a trajectory with timestamps in the past is processed correctly and references are served properly.
 TEST_F(TestFixture, TestQueuePast) {
-  double t0 = ros::Time::now().toSec() - 5;
+  const double t0 = ros::Time::now().toSec() - 5.0;
   auto [ts, dts, xs, dxs, us, Ks, types, params] = build_msg(t0);
   while (!sub.has_new_msg()){
     pub.publish(ts, dts, xs, dxs, us, Ks, types, params);
@@ -132,7 +132,7 @@ TEST_F(TestFixture, TestQueuePast) {
 
   size_t N = ts.size();
   while (ros::Time::now().toSec() < ts.back() + 1.0) {
-    double t_now = ros::Time::now().toSec() - sub.get_communication_delay();
+    const double t_now = ros::Time::now().toSec() - sub.get_communication_delay();
     if (t_now < ts.front()) {
       ASSERT_FALSE(sub.process_queue());
       ASSERT_THROW(sub.get_current_reference(), std::runtime_error);
@@ -160,7 +160,7 @@ TEST_F(TestFixture, TestQueuePast) {
 
 // Verifies that a trajectory with timestamps in the near future waits before becoming active and behaves correctly thereafter.
 TEST_F(TestFixture, TestQueueFuture) {
-  double t0 = ros::Time::now().toSec() + 5;
+  const double t0 = ros::Time::now().toSec() + 5.0;
   auto [ts, dts, xs, dxs, us, Ks, types, params] = build_msg(t0);
   while (!sub.has_new_msg()){
     pub.publish(ts, dts, xs, dxs, us, Ks, types, params);
@@ -197,7 +197,7 @@ TEST_F(TestFixture, TestQueueFuture) {
 
 // Tests merging behavior when a new trajectory partially overlaps with the current one. Ensures correct merging and execution.
 TEST_F(TestFixture, TestPartialMerge) {
-  double t0 = ros::Time::now().toSec();
+  const double t0 = ros::Time::now().toSec();
   auto [ts1, dts1, xs1, dxs1, us1, Ks1, types1, params1] = build_msg(t0);
   while (!sub.has_new_msg()){
     pub.publish(ts1, dts1, xs1, dxs1, us1, Ks1, types1, params1);
@@ -206,7 +206,7 @@ TEST_F(TestFixture, TestPartialMerge) {
   ASSERT_TRUE(sub.process_queue());
 
   // Compute overlap time (1/4 into the first trajectory)
-  double overlap_start = ts1.front() + ((ts1.back() - ts1.front()) / 4);
+  const double overlap_start = ts1.front() + ((ts1.back() - ts1.front()) / 4);
 
   // Count preserved elements before overlap + delay
   size_t preserved = 0;
@@ -257,7 +257,7 @@ TEST_F(TestFixture, TestPartialMerge) {
   // Main loop: simulate execution by time and validate actual references
   size_t N = ts_merged.size();
   while (ros::Time::now().toSec() < ts_merged.back() + 1.0) {
-    double t_now = ros::Time::now().toSec() - sub.get_communication_delay();
+    const double t_now = ros::Time::now().toSec() - sub.get_communication_delay();
 
     if (t_now < ts_merged.front() + 1e-6) {
       ASSERT_FALSE(sub.process_queue());
@@ -291,7 +291,7 @@ TEST_F(TestFixture, TestPartialMerge) {
 // correctly to the queue and both sets of references are returned at the right time.
 TEST_F(TestFixture, TestAppendAfterEnd) {
   // First trajectory: starting now
-  double t0 = ros::Time::now().toSec();
+  const double t0 = ros::Time::now().toSec();
   auto [ts1, dts1, xs1, dxs1, us1, Ks1, types1, params1] = build_msg(t0);
   while (!sub.has_new_msg()) {
     pub.publish(ts1, dts1, xs1, dxs1, us1, Ks1, types1, params1);
@@ -304,8 +304,8 @@ TEST_F(TestFixture, TestAppendAfterEnd) {
   }
 
   // Second trajectory: starts well after the first ends
-  double t_end1 = ts1.back() + dts1.back();
-  double t2 = t_end1 + 1.0;
+  const double t_end1 = ts1.back() + dts1.back();
+  const double t2 = t_end1 + 1.0;
   auto [ts2, dts2, xs2, dxs2, us2, Ks2, types2, params2] = build_msg(t2);
   while (sub.has_new_msg()) {
     sub.process_queue();  // clear any leftover from the previous
@@ -317,10 +317,10 @@ TEST_F(TestFixture, TestAppendAfterEnd) {
   }
   ASSERT_TRUE(sub.process_queue());
 
-  size_t N1 = ts1.size();
-  size_t N2 = ts2.size();
-  double t_deadzone_start = ts1.back() + dts1.back();
-  double t_deadzone_end = ts2.front();
+  const size_t N1 = ts1.size();
+  const size_t N2 = ts2.size();
+  const double t_deadzone_start = ts1.back() + dts1.back();
+  const double t_deadzone_end = ts2.front();
 
   while (ros::Time::now().toSec() < ts2.back() + 1.0) {
     double t_now = ros::Time::now().toSec() - sub.get_communication_delay();
@@ -368,7 +368,7 @@ TEST_F(TestFixture, TestAppendAfterEnd) {
 // Ensures that old messages (with older internal timestamps) are correctly rejected even if the ROS header stamp is newer.
 TEST_F(TestFixture, TestDropOldNewMessage) {
   // Publish a valid trajectory
-  double t0 = ros::Time::now().toSec();
+  const double t0 = ros::Time::now().toSec();
   auto [ts1, dts1, xs1, dxs1, us1, Ks1, types1, params1] = build_msg(t0);
   while (!sub.has_new_msg()){
     pub.publish(ts1, dts1, xs1, dxs1, us1, Ks1, types1, params1);
@@ -377,7 +377,7 @@ TEST_F(TestFixture, TestDropOldNewMessage) {
   ASSERT_TRUE(sub.process_queue());
 
   // Now try to send an "older" message but with newer header.stamp
-  double t_old = ts1.front() - 1.0;  // earlier than queue start
+  const double t_old = ts1.front() - 1.0;  // earlier than queue start
   auto [ts2, dts2, xs2, dxs2, us2, Ks2, types2, params2] = build_msg(t_old);
   
   while (!sub.has_new_msg()){
@@ -389,7 +389,7 @@ TEST_F(TestFixture, TestDropOldNewMessage) {
   ASSERT_TRUE(sub.process_queue());
   auto [t, dt, x, dx, u, K, type_, param] = sub.get_current_reference();
   size_t idx = 0;
-  double t_now = ros::Time::now().toSec() - sub.get_communication_delay();
+  const double t_now = ros::Time::now().toSec() - sub.get_communication_delay();
   while (idx + 1 < ts1.size() && ts1[idx + 1] <= t_now) ++idx;
   ASSERT_NEAR(t, ts1[idx], 1e-9);  // still pointing to original
 }
