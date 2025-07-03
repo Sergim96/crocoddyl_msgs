@@ -1,7 +1,10 @@
+///////////////////////////////////////////////////////////////////////////////
 // BSD 3-Clause License
 //
-// Copyright (C) 2023-2023, Heriot-Watt University
+// Copyright (C) 2025-2025, Heriot-Watt University
+// Copyright note valid unless otherwise stated in individual files.
 // All rights reserved.
+///////////////////////////////////////////////////////////////////////////////
 
 
 #include <algorithm>
