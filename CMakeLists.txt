@@ -114,6 +114,7 @@ else() # ROS 1
   endif()
   # Build the Python interface for the ROS publisher and subscriber
   foreach(PYBIND11_MODULE ${${PROJECT_NAME}_PYBIND11_MODULE})
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION FALSE)
     pybind11_add_module(${PYBIND11_MODULE} MODULE src/${PYBIND11_MODULE}.cpp)
     target_include_directories(
       ${PYBIND11_MODULE} PUBLIC include ${catkin_INCLUDE_DIRS}
