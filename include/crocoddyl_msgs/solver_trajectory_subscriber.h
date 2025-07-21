@@ -10,6 +10,7 @@
 #define CROCODDYL_MSG_SOLVER_TRAJECTORY_SUBSCRIBER_H_
 
 #include "crocoddyl_msgs/conversions.h"
+#include <deque>
 
 #include <Eigen/Dense>
 #include <mutex>
@@ -40,7 +41,8 @@ public:
    * @param[in] frame  Odometry frame
    */
   SolverTrajectoryRosSubscriber(
-      const std::string &topic = "/crocoddyl/solver_trajectory")
+      const std::string &topic = "/crocoddyl/solver_trajectory",
+      bool verbose = false)
 #ifdef ROS2
       : node_(rclcpp::Node::make_shared("solver_trajectory_subscriber")),
         sub_(node_->create_subscription<SolverTrajectory>(
@@ -48,8 +50,9 @@ public:
             std::bind(&SolverTrajectoryRosSubscriber::callback, this,
                       std::placeholders::_1))),
         has_new_msg_(false), is_processing_msg_(false), last_msg_time_(0.),
-        communication_delay_(0.) {
+        communication_delay_(0.), verbose_(verbose), msg_counter_(0)  {
     spinner_.add_node(node_);
+    init_time_ = node_->get_clock()->now().seconds();
     thread_ = std::thread([this]() { this->spin(); });
     thread_.detach();
     RCLCPP_INFO_STREAM(node_->get_logger(),
@@ -60,8 +63,19 @@ public:
             topic, 1, &SolverTrajectoryRosSubscriber::callback, this,
             ros::TransportHints().tcpNoDelay())),
         has_new_msg_(false), is_processing_msg_(false), last_msg_time_(0.),
-        communication_delay_(0.) {
+        communication_delay_(0.), verbose_(verbose), msg_counter_(0)  {
     spinner_.start();
+    init_time_ = ros::Time::now().toSec();
+    if (verbose_) {
+      ROS_INFO_STREAM("Verbose mode enabled.");
+    }
+    if (verbose_) {
+      std::string filename = "/tmp/solver_trajectory_debug.csv";
+      log_file_.open(filename);
+      log_file_ << "t_rel,event,queue_size,queue_start,queue_end,t_now,t0,dt,msg_counter\n";
+      ROS_INFO_STREAM("Logging debug info to: " << filename);
+    }
+
     ROS_INFO_STREAM("Subscribing SolverTrajectory messages on " << topic);
 #endif
   }
@@ -115,6 +129,17 @@ public:
       Ks_[i].resize(control.gain.nu, control.gain.nx);
       crocoddyl_msgs::fromMsg(state, xs_[i], dxs_[i]);
       crocoddyl_msgs::fromMsg(control, us_[i], Ks_[i], types_[i], params_[i]);
+    }
+    if (verbose_) {
+    #ifdef ROS2
+      double now = node_->get_clock()->now().seconds();
+    #else
+      double now = ros::Time::now().toSec();
+    #endif
+      double t_rel = now - init_time_;
+      ROS_INFO_STREAM("[get_solver_trajectory] t=" << t_rel
+                      << "s | Parsed msg #" << msg_counter_
+                      << " | N=" << N);
     }
     // finish processing the message
     is_processing_msg_ = false;
@@ -175,7 +200,25 @@ public:
     double t0 = ts_queue_.front();
     double dt0 = dts_queue_.front();
     double t_now = now - communication_delay_;
-
+    if (verbose_) {
+      double t_rel = now - init_time_;
+      ROS_INFO_STREAM("[get_current_reference] t=" << t_rel << "s");
+      ROS_INFO_STREAM("  Queue size: " << ts_queue_.size());
+      if (!ts_queue_.empty()) {
+        ROS_INFO_STREAM("  Queue start: " << ts_queue_.front()
+                        << " | end: " << (ts_queue_.back() + dts_queue_.back())
+                        << " | now-delay: " << t_now);
+      }
+    }
+    if (verbose_ && log_file_.is_open()) {
+      log_file_ << std::fixed << std::setprecision(6)
+                << (now - init_time_) << ",get_current_reference,"
+                << ts_queue_.size() << ","
+                << ts_queue_.front() << ","
+                << (ts_queue_.back() + dts_queue_.back()) << ","
+                << t_now << "," << ts_queue_.front() << "," << dts_queue_.front() << ","
+                << msg_counter_ << "\n";
+    }
     // Handle the case of only one element and it's too old
     if (ts_queue_.size() == 1 && t_now > t0 + dt0) {
       ts_queue_.clear();
@@ -186,6 +229,9 @@ public:
       Ks_queue_.clear();
       types_queue_.clear();
       params_queue_.clear();
+      if (verbose_) {
+        ROS_WARN_STREAM("  -> Dropping stale final point. Queue cleared.");
+      }
       throw std::runtime_error(
           "[SolverTrajectoryRosSubscriber::get_current_reference] "
           "Single remaining point is too old. Queue cleared.");
@@ -204,9 +250,17 @@ public:
         types_queue_.pop_front();
         params_queue_.pop_front();
       }
+      if (verbose_) {
+        ROS_INFO_STREAM("  -> Returning reference at t=" << ts_queue_.front() << " with dt="<< dts_queue_.front());
+      }
       return {ts_queue_.front(),    dts_queue_.front(),   xs_queue_.front(),
               dxs_queue_.front(),   us_queue_.front(),    Ks_queue_.front(),
               types_queue_.front(), params_queue_.front()};
+    }
+    if (verbose_) {
+      ROS_WARN_STREAM("  -> No valid reference. Next t=" << t0
+                      << " | now-delay=" << t_now
+                      << " | time to wait=" << (t0 - t_now) << "s");
     }
     // Nothing ready
     std::ostringstream oss;
@@ -285,22 +339,22 @@ public:
       double t0_cur = ts_queue_.empty() ? t0_new : ts_queue_.front();
       double tN_cur =
           ts_queue_.empty() ? t0_new : ts_queue_.back() + dts_queue_.back();
-
-      // Reject if new message is older than current queue (t0_new << t0_cur)
-      if (!ts_queue_.empty() &&
-          t0_new + communication_delay_ < ts_queue_.front()) {
-        std::cerr << std::fixed << std::setprecision(5);
-        std::cerr << "[SolverTrajectoryRosSubscriber] Rejecting old message: "
-                     "t0_new = "
-                  << t0_new << ", current queue t0 = " << ts_queue_.front()
-                  << std::endl;
-        if (!ts_queue_.empty() && ts_queue_.front() <= t_now) {
-          return true;
-        } else {
-          return false;
-        }
+      if (verbose_) {
+      #ifdef ROS2
+        double now = node_->get_clock()->now().seconds();
+      #else
+        double now = ros::Time::now().toSec();
+      #endif
+        double t_rel = now - init_time_;
+        msg_counter_++;
+        ROS_INFO_STREAM("[process_queue] t=" << t_rel << "s | msg #" << msg_counter_
+                        << " | new start=" << t0_new << " | current start=" << t0_cur
+                        << " | current end=" << tN_cur);
       }
       if (std::abs(t0_new - t0_cur) < communication_delay_) {
+        if (verbose_) {
+          ROS_INFO_STREAM("  -> Replacing full queue with new message");
+        }
         ts_queue_.clear();
         dts_queue_.clear();
         xs_queue_.clear();
@@ -321,6 +375,9 @@ public:
         }
 
       } else if (tN_cur + communication_delay_ < t0_new) {
+        if (verbose_) {
+          ROS_INFO_STREAM("  -> Appending new message after current queue");
+        }
         for (std::size_t i = 0; i < ts_new.size(); ++i) {
           ts_queue_.push_back(ts_new[i]);
           dts_queue_.push_back(dts_new[i]);
@@ -332,6 +389,9 @@ public:
           params_queue_.push_back(params_new[i]);
         }
       } else {
+        if (verbose_) {
+          ROS_INFO_STREAM("  -> Merging new message after truncating current queue");
+        }
         std::deque<double> ts_merged;
         std::deque<double> dts_merged;
         std::deque<Eigen::VectorXd> xs_merged;
@@ -378,6 +438,15 @@ public:
         std::swap(types_queue_, types_merged);
         std::swap(params_queue_, params_merged);
       }
+      if (verbose_ && log_file_.is_open()) {
+        log_file_ << std::fixed << std::setprecision(6)
+                  << (now - init_time_) << ",process_queue,"
+                  << ts_queue_.size() << ","
+                  << (ts_queue_.empty() ? -1 : ts_queue_.front()) << ","
+                  << (ts_queue_.empty() ? -1 : ts_queue_.back() + dts_queue_.back()) << ","
+                  << t_now << "," << t0_new << ",-1,"
+                  << msg_counter_ << "\n";
+      }
     }
 
     // STEP 2: Determine if queue has a reference ready for execution
@@ -391,7 +460,15 @@ public:
       types_queue_.pop_front();
       params_queue_.pop_front();
     }
-
+    if (verbose_) {
+      if (!ts_queue_.empty()) {
+        ROS_INFO_STREAM("  Final queue: start=" << ts_queue_.front()
+                        << " | end=" << (ts_queue_.back() + dts_queue_.back())
+                        << " | size=" << ts_queue_.size());
+      } else {
+        ROS_INFO_STREAM("  Final queue is empty.");
+      }
+    }
     // Now check the head entry
     if (!ts_queue_.empty() && ts_queue_.front() <= t_now &&
         t_now <= ts_queue_.front() + dts_queue_.front()) {
@@ -446,6 +523,10 @@ private:
   std::deque<Eigen::MatrixXd> Ks_queue_;
   std::deque<crocoddyl_msgs::ControlType> types_queue_;
   std::deque<crocoddyl_msgs::ControlParametrization> params_queue_;
+  bool verbose_;
+  double init_time_;
+  std::size_t msg_counter_;
+  std::ofstream log_file_;
 
   void callback(SolverTrajectorySharedPtr msg) {
     if (!is_processing_msg_) {

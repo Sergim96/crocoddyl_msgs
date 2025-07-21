@@ -4,6 +4,10 @@ if(CATKIN_ENABLE_TESTING)
   # -----------------------
   find_package(catkin REQUIRED COMPONENTS roscpp std_msgs whole_body_state_msgs)
   find_package(rostest REQUIRED)
+  find_package(Python3 REQUIRED COMPONENTS Development)
+  find_package(pybind11_catkin REQUIRED)
+
+  # add_compile_options(-std=c++17)
 
   catkin_add_gtest(test_solver_queue test_solver_queue.cpp)
   target_include_directories(

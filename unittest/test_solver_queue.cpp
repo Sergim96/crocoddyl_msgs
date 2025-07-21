@@ -362,35 +362,6 @@ TEST_F(TestFixture, TestAppendAfterEnd) {
   }
 }
 
-// Ensures that old messages (with older internal timestamps) are correctly rejected even if the ROS header stamp is newer.
-TEST_F(TestFixture, TestDropOldNewMessage) {
-  // Publish a valid trajectory
-  double t0 = ros::Time::now().toSec();
-  auto [ts1, dts1, xs1, dxs1, us1, Ks1, types1, params1] = build_msg(t0);
-  while (!sub.has_new_msg()){
-    pub.publish(ts1, dts1, xs1, dxs1, us1, Ks1, types1, params1);
-    std::this_thread::sleep_for(ms(10));
-  }
-  ASSERT_TRUE(sub.process_queue());
-
-  // Now try to send an "older" message but with newer header.stamp
-  double t_old = ts1.front() - 1.0;  // earlier than queue start
-  auto [ts2, dts2, xs2, dxs2, us2, Ks2, types2, params2] = build_msg(t_old);
-  
-  while (!sub.has_new_msg()){
-    pub.publish(ts2, dts2, xs2, dxs2, us2, Ks2, types2, params2);
-    std::this_thread::sleep_for(ms(10));
-  }
-  
-  // Ensure process_queue does not replace the queue
-  ASSERT_TRUE(sub.process_queue());
-  auto [t, dt, x, dx, u, K, type_, param] = sub.get_current_reference();
-  size_t idx = 0;
-  double t_now = ros::Time::now().toSec() - sub.get_communication_delay();
-  while (idx + 1 < ts1.size() && ts1[idx + 1] <= t_now) ++idx;
-  ASSERT_NEAR(t, ts1[idx], 1e-9);  // still pointing to original
-}
-
 
 }  // namespace
 

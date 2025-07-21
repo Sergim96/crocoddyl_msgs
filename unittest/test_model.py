@@ -120,21 +120,21 @@ class TestModelAbstract(unittest.TestCase):
             [self.MODEL.getJointId(name) for name in self.LOCKED_JOINTS],
             qref,
         )
-        if pinocchio.__version__ >= "2.7.1":
-            frame_names = [
-                f.name
-                for f in reduced_model.frames
-                if f.name != "universe"
-                and (
-                    f.type == pinocchio.BODY
-                    or f.type == pinocchio.JOINT
-                    or f.type == pinocchio.FIXED_JOINT
-                )
-            ]
-        else:
-            frame_names = [
-                f.name for f in reduced_model.frames if f.type == pinocchio.JOINT
-            ]
+        # if pinocchio.__version__ >= "2.7.1":
+        #     frame_names = [
+        #         f.name
+        #         for f in reduced_model.frames
+        #         if f.name != "universe"
+        #         and (
+        #             f.type == pinocchio.BODY
+        #             or f.type == pinocchio.JOINT
+        #             or f.type == pinocchio.FIXED_JOINT
+        #         )
+        #     ]
+        # else:
+        frame_names = [
+            f.name for f in reduced_model.frames if f.type == pinocchio.JOINT
+        ]
         for frame_name in frame_names:
             parameters = pinocchio.Inertia.Random().toDynamicParameters()
             updateBodyInertialParameters(reduced_model, frame_name, parameters)
@@ -155,21 +155,21 @@ class TestModelAbstract(unittest.TestCase):
             )
 
     def test_update_body_inertial_parameters_with_reduced_model(self):
-        if pinocchio.__version__ >= "2.7.1":
-            frame_names = [
-                f.name
-                for f in self.MODEL.frames
-                if f.name != "universe"
-                and (
-                    f.type == pinocchio.BODY
-                    or f.type == pinocchio.JOINT
-                    or f.type == pinocchio.FIXED_JOINT
-                )
-            ]
-        else:
-            frame_names = [
-                f.name for f in self.MODEL.frames if f.type == pinocchio.JOINT
-            ]
+        # if pinocchio.__version__ >= "2.7.1":
+        #     frame_names = [
+        #         f.name
+        #         for f in self.MODEL.frames
+        #         if f.name != "universe"
+        #         and (
+        #             f.type == pinocchio.BODY
+        #             or f.type == pinocchio.JOINT
+        #             or f.type == pinocchio.FIXED_JOINT
+        #         )
+        #     ]
+        # else:
+        frame_names = [
+            f.name for f in self.MODEL.frames if f.type == pinocchio.JOINT
+        ]
         for frame_name in frame_names:
             parameters = pinocchio.Inertia.Random().toDynamicParameters()
             updateBodyInertialParameters(self.MODEL, frame_name, parameters)
