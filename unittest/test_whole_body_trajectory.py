@@ -37,7 +37,7 @@ class TestWholeBodyTrajectoryAbstract(unittest.TestCase):
     MODEL = None
     LOCKED_JOINTS = None
 
-    def setUp(self) -> None:
+    def setUp(self):
         if ROS_VERSION == 2:
             if not rclpy.ok():
                 rclpy.init()

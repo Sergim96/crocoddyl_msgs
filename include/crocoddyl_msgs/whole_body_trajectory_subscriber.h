@@ -338,46 +338,46 @@ private:
     a_.setZero();
   }
 
-  void callback(WholeBodyTrajectorySharedPtr msg) {
-    if (msg->header.frame_id != odom_frame_) {
+void callback(WholeBodyTrajectorySharedPtr msg) {
+  if (msg->header.frame_id != odom_frame_) {
 #ifdef ROS2
-      RCLCPP_ERROR_STREAM(
-          node_->get_logger(),
-          "Error: the whole-body trajectory is not expressed in "
-              << odom_frame_ << " (i.e., 'odom_frame')");
+    RCLCPP_ERROR_STREAM(
+        node_->get_logger(),
+        "Error: the whole-body trajectory is not expressed in "
+            << odom_frame_ << " (i.e., 'odom_frame')");
 #else
-      ROS_ERROR_STREAM("Error: the whole-body trajectory is not expressed in "
-                       << odom_frame_ << " (i.e., 'odom_frame')");
+    ROS_ERROR_STREAM("Error: the whole-body trajectory is not expressed in "
+                     << odom_frame_ << " (i.e., 'odom_frame')");
 #endif
-      return;
-    }
-    if (!is_processing_msg_) {
+    return;
+  }
+if (!is_processing_msg_) {
 #ifdef ROS2
-      double t = rclcpp::Time(msg->header.stamp).seconds();
+  double t = rclcpp::Time(msg->header.stamp).seconds();
 #else
-      double t = msg->header.stamp.toNSec();
+  double t = msg->header.stamp.toNSec();
 #endif
-      // Avoid out of order arrival and ensure each message is newer (or equal
+// Avoid out of order arrival and ensure each message is newer (or equal
       // to) than the preceeding:
-      if (last_msg_time_ <= t) {
-        std::lock_guard<std::mutex> guard(mutex_);
-        msg_ = *msg;
-        has_new_msg_ = true;
-        last_msg_time_ = t;
-      } else {
+    if (last_msg_time_ <= t) {
+      std::lock_guard<std::mutex> guard(mutex_);
+      msg_ = *msg;
+      has_new_msg_ = true;
+      last_msg_time_ = t;
+    } else {
 #ifdef ROS2
-        RCLCPP_WARN_STREAM(node_->get_logger(),
-                           "Out of order message. Last timestamp: "
-                               << std::fixed << last_msg_time_
-                               << ", current timestamp: " << t);
+      RCLCPP_WARN_STREAM(node_->get_logger(),
+                         "Out of order message. Last timestamp: "
+                             << std::fixed << last_msg_time_
+                             << ", current timestamp: " << t);
 #else
-        ROS_WARN_STREAM("Out of order message. Last timestamp: "
-                        << std::fixed << last_msg_time_
-                        << ", current timestamp: " << t);
+      ROS_WARN_STREAM("Out of order message. Last timestamp: "
+                      << std::fixed << last_msg_time_
+                      << ", current timestamp: " << t);
 #endif
-      }
     }
   }
+}
 };
 
 } // namespace crocoddyl_msgs

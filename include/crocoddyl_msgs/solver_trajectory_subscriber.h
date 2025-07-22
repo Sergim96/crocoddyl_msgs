@@ -9,6 +9,7 @@
 #ifndef CROCODDYL_MSG_SOLVER_TRAJECTORY_SUBSCRIBER_H_
 #define CROCODDYL_MSG_SOLVER_TRAJECTORY_SUBSCRIBER_H_
 
+#include <deque>
 #include "crocoddyl_msgs/conversions.h"
 
 #include <Eigen/Dense>
@@ -287,20 +288,23 @@ public:
           ts_queue_.empty() ? t0_new : ts_queue_.back() + dts_queue_.back();
 
       // Reject if new message is older than current queue (t0_new << t0_cur)
-      if (!ts_queue_.empty() &&
-          t0_new + communication_delay_ < ts_queue_.front()) {
-        std::cerr << std::fixed << std::setprecision(5);
-        std::cerr << "[SolverTrajectoryRosSubscriber] Rejecting old message: "
-                     "t0_new = "
-                  << t0_new << ", current queue t0 = " << ts_queue_.front()
-                  << std::endl;
-        if (!ts_queue_.empty() && ts_queue_.front() <= t_now) {
-          return true;
-        } else {
-          return false;
-        }
-      }
+      // double kTimingTolerance = 0.005;
+      // if (!ts_queue_.empty() &&
+      //     (t0_new + communication_delay_ + kTimingTolerance) < ts_queue_.front()) {
+      //   std::cerr << std::fixed << std::setprecision(5);
+      //   std::cerr << "[SolverTrajectoryRosSubscriber] Rejecting old message: t0_new + delay = "
+      //     << t0_new + communication_delay_ << ", current queue t0 = " << ts_queue_.front()
+      //     << ", delay = " << communication_delay_ << std::endl;
+      //   if (!ts_queue_.empty() && ts_queue_.front() <= t_now) {
+      //     return true;
+      //   } else {
+      //     return false;
+      //   }
+      // }
+      // Replace current queue if new message starts at the same time
+      // (within communication delay)
       if (std::abs(t0_new - t0_cur) < communication_delay_) {
+        // std::cerr << "[SolverTrajectoryRosSubscriber] replace" << std::endl;
         ts_queue_.clear();
         dts_queue_.clear();
         xs_queue_.clear();
@@ -321,6 +325,7 @@ public:
         }
 
       } else if (tN_cur + communication_delay_ < t0_new) {
+        // std::cerr << "[SolverTrajectoryRosSubscriber] Append" << std::endl;
         for (std::size_t i = 0; i < ts_new.size(); ++i) {
           ts_queue_.push_back(ts_new[i]);
           dts_queue_.push_back(dts_new[i]);
@@ -332,6 +337,7 @@ public:
           params_queue_.push_back(params_new[i]);
         }
       } else {
+        // std::cerr << "[SolverTrajectoryRosSubscriber] Merge" << std::endl;
         std::deque<double> ts_merged;
         std::deque<double> dts_merged;
         std::deque<Eigen::VectorXd> xs_merged;
@@ -447,8 +453,8 @@ private:
   std::deque<crocoddyl_msgs::ControlType> types_queue_;
   std::deque<crocoddyl_msgs::ControlParametrization> params_queue_;
 
-  void callback(SolverTrajectorySharedPtr msg) {
-    if (!is_processing_msg_) {
+void callback(SolverTrajectorySharedPtr msg) {
+  if (!is_processing_msg_) {
 #ifdef ROS2
       double msg_time = rclcpp::Time(msg->header.stamp).seconds();
       double now = node_->get_clock()->now().seconds();
@@ -475,9 +481,9 @@ private:
                         << std::fixed << last_msg_time_
                         << ", current timestamp: " << msg_time);
 #endif
-      }
     }
   }
+}
 };
 
 } // namespace crocoddyl_msgs
