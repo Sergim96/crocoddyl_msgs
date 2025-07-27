@@ -10,6 +10,7 @@
 #define CROCODDYL_MSG_SOLVER_TRAJECTORY_SUBSCRIBER_H_
 
 #include "crocoddyl_msgs/conversions.h"
+#include <deque>
 
 #include <Eigen/Dense>
 #include <mutex>
