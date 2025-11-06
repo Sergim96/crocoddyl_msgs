@@ -23,7 +23,8 @@ find_package(pinocchio 2.6.18 REQUIRED)
 
 # Define the Python modules
 set(${PROJECT_NAME}_PYBIND11_MODULE crocoddyl_ros)
-include_directories($ENV{CONDA_PREFIX}/lib/python3.11/site-packages/numpy/core/include)
+include_directories(
+  $ENV{CONDA_PREFIX}/lib/python3.11/site-packages/numpy/core/include)
 if($ENV{ROS_VERSION} EQUAL 2) # ROS 2
   add_definitions(-DROS2)
   # Default to C++14

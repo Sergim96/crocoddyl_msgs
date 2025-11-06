@@ -9,8 +9,8 @@
 #ifndef CROCODDYL_MSG_SOLVER_TRAJECTORY_SUBSCRIBER_H_
 #define CROCODDYL_MSG_SOLVER_TRAJECTORY_SUBSCRIBER_H_
 
-#include <deque>
 #include "crocoddyl_msgs/conversions.h"
+#include <deque>
 
 #include <Eigen/Dense>
 #include <mutex>
@@ -41,9 +41,12 @@ public:
    * @param[in] frame  Odometry frame
    */
   SolverTrajectoryRosSubscriber(
-      const std::string &topic = "/crocoddyl/solver_trajectory")
+      const std::string &topic = "/crocoddyl/solver_trajectory",
+      bool interpolation = false, unsigned int interpolation_window = 0)
 #ifdef ROS2
       : node_(rclcpp::Node::make_shared("solver_trajectory_subscriber")),
+        interpolation_(interpolation),
+        interpolation_window_(interpolation_window),
         sub_(node_->create_subscription<SolverTrajectory>(
             topic, 1,
             std::bind(&SolverTrajectoryRosSubscriber::callback, this,
@@ -56,12 +59,15 @@ public:
     RCLCPP_INFO_STREAM(node_->get_logger(),
                        "Subscribing SolverTrajectory messages on " << topic);
 #else
-      : node_(), spinner_(2),
+      : node_(), spinner_(2), interpolation_(interpolation),
+        interpolation_window_(interpolation_window),
         sub_(node_.subscribe<SolverTrajectory>(
             topic, 1, &SolverTrajectoryRosSubscriber::callback, this,
             ros::TransportHints().tcpNoDelay())),
         has_new_msg_(false), is_processing_msg_(false), last_msg_time_(0.),
         communication_delay_(0.) {
+    // std::cout << "interpolation_window_: " << interpolation_window_
+    //           << std::endl;
     spinner_.start();
     ROS_INFO_STREAM("Subscribing SolverTrajectory messages on " << topic);
 #endif
@@ -217,7 +223,7 @@ public:
         << "Next timestamp: " << t0 << "\n"
         << "Current time: " << now << "\n"
         << "Communication delay: " << communication_delay_ << "\n"
-        << "Current time + delay: " << t_now << "\n"
+        << "Current time - delay: " << t_now << "\n"
         << "Time to wait: " << (t0 - t_now) << "s";
     throw std::runtime_error(oss.str());
   }
@@ -274,120 +280,258 @@ public:
 
     // STEP 1: Handle new message if available
     if (has_new_msg_) {
-      const auto &[ts_new, dts_new, xs_new, dxs_new, us_new, Ks_new, types_new,
-                   params_new] = get_solver_trajectory();
+      auto [ts_new, dts_new, xs_new, dxs_new, us_new, Ks_new, types_new,
+            params_new] = get_solver_trajectory(); // by value, safe to modify
 
       if (ts_new.empty()) {
-        throw std::runtime_error("[SolverTrajectoryRosSubscriber::process_"
-                                 "queue] Received empty trajectory.");
+        throw std::runtime_error(
+            "[SolverTrajectoryRosSubscriber::process_queue] "
+            "Received empty trajectory.");
       }
 
       double t0_new = ts_new.front();
-      double t0_cur = ts_queue_.empty() ? t0_new : ts_queue_.front();
-      double tN_cur =
-          ts_queue_.empty() ? t0_new : ts_queue_.back() + dts_queue_.back();
+      double tN_new = ts_new.back() + dts_new.back();
 
-      // Reject if new message is older than current queue (t0_new << t0_cur)
-      // double kTimingTolerance = 0.005;
-      // if (!ts_queue_.empty() &&
-      //     (t0_new + communication_delay_ + kTimingTolerance) < ts_queue_.front()) {
-      //   std::cerr << std::fixed << std::setprecision(5);
-      //   std::cerr << "[SolverTrajectoryRosSubscriber] Rejecting old message: t0_new + delay = "
-      //     << t0_new + communication_delay_ << ", current queue t0 = " << ts_queue_.front()
-      //     << ", delay = " << communication_delay_ << std::endl;
-      //   if (!ts_queue_.empty() && ts_queue_.front() <= t_now) {
-      //     return true;
-      //   } else {
-      //     return false;
-      //   }
-      // }
-      // Replace current queue if new message starts at the same time
-      // (within communication delay)
-      if (std::abs(t0_new - t0_cur) < communication_delay_) {
-        // std::cerr << "[SolverTrajectoryRosSubscriber] replace" << std::endl;
-        ts_queue_.clear();
-        dts_queue_.clear();
-        xs_queue_.clear();
-        dxs_queue_.clear();
-        us_queue_.clear();
-        Ks_queue_.clear();
-        types_queue_.clear();
-        params_queue_.clear();
-        for (std::size_t i = 0; i < ts_new.size(); ++i) {
-          ts_queue_.push_back(ts_new[i]);
-          dts_queue_.push_back(dts_new[i]);
-          xs_queue_.push_back(xs_new[i]);
-          dxs_queue_.push_back(dxs_new[i]);
-          us_queue_.push_back(us_new[i]);
-          Ks_queue_.push_back(Ks_new[i]);
-          types_queue_.push_back(types_new[i]);
-          params_queue_.push_back(params_new[i]);
-        }
-
-      } else if (tN_cur + communication_delay_ < t0_new) {
-        // std::cerr << "[SolverTrajectoryRosSubscriber] Append" << std::endl;
-        for (std::size_t i = 0; i < ts_new.size(); ++i) {
-          ts_queue_.push_back(ts_new[i]);
-          dts_queue_.push_back(dts_new[i]);
-          xs_queue_.push_back(xs_new[i]);
-          dxs_queue_.push_back(dxs_new[i]);
-          us_queue_.push_back(us_new[i]);
-          Ks_queue_.push_back(Ks_new[i]);
-          types_queue_.push_back(types_new[i]);
-          params_queue_.push_back(params_new[i]);
-        }
+      // (A) Reject message that is fully in the past w.r.t. current time
+      if (tN_new < t_now) {
+#ifndef ROS2
+        ROS_WARN_STREAM("[SolverTrajectoryRosSubscriber::process_queue] "
+                        "Received fully outdated trajectory: "
+                        << "t0_new=" << t0_new << "  tN_new=" << tN_new
+                        << "  t_now=" << t_now);
+#else
+        RCLCPP_WARN_STREAM(node_->get_logger(),
+                           "[SolverTrajectoryRosSubscriber::process_queue] "
+                           "Received fully outdated trajectory: "
+                               << "t0_new=" << t0_new << "  tN_new=" << tN_new
+                               << "  t_now=" << t_now);
+#endif
       } else {
-        // std::cerr << "[SolverTrajectoryRosSubscriber] Merge" << std::endl;
-        std::deque<double> ts_merged;
-        std::deque<double> dts_merged;
-        std::deque<Eigen::VectorXd> xs_merged;
-        std::deque<Eigen::VectorXd> dxs_merged;
-        std::deque<Eigen::VectorXd> us_merged;
-        std::deque<Eigen::MatrixXd> Ks_merged;
-        std::deque<crocoddyl_msgs::ControlType> types_merged;
-        std::deque<crocoddyl_msgs::ControlParametrization> params_merged;
+        // Helper: blend first M samples of *new* traj with a single old anchor
+        auto apply_blending =
+            [&](const Eigen::VectorXd &x_old, const Eigen::VectorXd &dx_old,
+                const Eigen::VectorXd &u_old, const Eigen::MatrixXd &K_old) {
+              if (!interpolation_ || interpolation_window_ == 0)
+                return;
+              std::size_t M =
+                  std::min<std::size_t>(interpolation_window_, xs_new.size());
+              for (std::size_t i = 0; i < M; ++i) {
+                double alpha = static_cast<double>(i + 1) /
+                               static_cast<double>(M); // (0, 1]
 
-        // Preserve valid portion of current queue (before t0_new + delay)
-        for (std::size_t i = 0; i < ts_queue_.size(); ++i) {
-          if (ts_queue_[i] < t0_new + communication_delay_) {
-            ts_merged.push_back(ts_queue_[i]);
-            dts_merged.push_back(dts_queue_[i]);
-            xs_merged.push_back(xs_queue_[i]);
-            dxs_merged.push_back(dxs_queue_[i]);
-            us_merged.push_back(us_queue_[i]);
-            Ks_merged.push_back(Ks_queue_[i]);
-            types_merged.push_back(types_queue_[i]);
-            params_merged.push_back(params_queue_[i]);
+                xs_new[i] = (1.0 - alpha) * x_old + alpha * xs_new[i];
+                dxs_new[i] = (1.0 - alpha) * dx_old + alpha * dxs_new[i];
+                us_new[i] = (1.0 - alpha) * u_old + alpha * us_new[i];
+                Ks_new[i] = (1.0 - alpha) * K_old + alpha * Ks_new[i];
+              }
+            };
+
+        // (B) Message still has future content -> do replace/append/merge
+        double t0_cur = ts_queue_.empty() ? t0_new : ts_queue_.front();
+        double tN_cur =
+            ts_queue_.empty() ? t0_new : ts_queue_.back() + dts_queue_.back();
+
+        // 1) REPLACE (same start time)
+        if (std::abs(t0_new - t0_cur) < communication_delay_) {
+          // std::cout << "Replacing current trajectory." << std::endl;
+
+          if (!ts_queue_.empty() && interpolation_ &&
+              interpolation_window_ > 0) {
+            // std::cout << "Replacing with interpolation." << std::endl;
+            const Eigen::VectorXd &x_old = xs_queue_.front();
+            const Eigen::VectorXd &dx_old = dxs_queue_.front();
+            const Eigen::VectorXd &u_old = us_queue_.front();
+            const Eigen::MatrixXd &K_old = Ks_queue_.front();
+            apply_blending(x_old, dx_old, u_old, K_old);
           } else {
-            break;
+            // std::cout << "Replacing without interpolation." << std::endl;
+          }
+
+          // Replace queue by (possibly blended) new trajectory
+          ts_queue_.assign(ts_new.begin(), ts_new.end());
+          dts_queue_.assign(dts_new.begin(), dts_new.end());
+          xs_queue_.assign(xs_new.begin(), xs_new.end());
+          dxs_queue_.assign(dxs_new.begin(), dxs_new.end());
+          us_queue_.assign(us_new.begin(), us_new.end());
+          Ks_queue_.assign(Ks_new.begin(), Ks_new.end());
+          types_queue_.assign(types_new.begin(), types_new.end());
+          params_queue_.assign(params_new.begin(), params_new.end());
+
+          // 2) APPEND (new starts after current ends)
+        } else if (tN_cur + communication_delay_ < t0_new) {
+          // std::cout << "Appending current trajectory." << std::endl;
+
+          if (!ts_queue_.empty() && interpolation_ &&
+              interpolation_window_ > 0) {
+            // std::cout << "Appending with interpolation." << std::endl;
+            // Anchor = last point of current queue
+            const Eigen::VectorXd &x_old = xs_queue_.back();
+            const Eigen::VectorXd &dx_old = dxs_queue_.back();
+            const Eigen::VectorXd &u_old = us_queue_.back();
+            const Eigen::MatrixXd &K_old = Ks_queue_.back();
+            apply_blending(x_old, dx_old, u_old, K_old);
+          } else {
+            // std::cout << "Appending without interpolation." << std::endl;
+          }
+
+          // Append (possibly blended) new trajectory
+          for (std::size_t i = 0; i < ts_new.size(); ++i) {
+            ts_queue_.push_back(ts_new[i]);
+            dts_queue_.push_back(dts_new[i]);
+            xs_queue_.push_back(xs_new[i]);
+            dxs_queue_.push_back(dxs_new[i]);
+            us_queue_.push_back(us_new[i]);
+            Ks_queue_.push_back(Ks_new[i]);
+            types_queue_.push_back(types_new[i]);
+            params_queue_.push_back(params_new[i]);
+          }
+
+          // 3) MERGE (partial overlap)
+          // 3) MERGE (partial overlap)
+        } else {
+          // std::cout << "Merging current trajectory." << std::endl;
+
+          std::deque<double> ts_merged;
+          std::deque<double> dts_merged;
+          std::deque<Eigen::VectorXd> xs_merged;
+          std::deque<Eigen::VectorXd> dxs_merged;
+          std::deque<Eigen::VectorXd> us_merged;
+          std::deque<Eigen::MatrixXd> Ks_merged;
+          std::deque<crocoddyl_msgs::ControlType> types_merged;
+          std::deque<crocoddyl_msgs::ControlParametrization> params_merged;
+
+          // Preserve valid portion of current queue (before t0_new + delay)
+          std::size_t last_preserved_idx = 0;
+          bool preserved_any = false;
+          for (std::size_t i = 0; i < ts_queue_.size(); ++i) {
+            if (ts_queue_[i] < t0_new + communication_delay_) {
+              ts_merged.push_back(ts_queue_[i]);
+              dts_merged.push_back(dts_queue_[i]);
+              xs_merged.push_back(xs_queue_[i]);
+              dxs_merged.push_back(dxs_queue_[i]);
+              us_merged.push_back(us_queue_[i]);
+              Ks_merged.push_back(Ks_queue_[i]);
+              types_merged.push_back(types_queue_[i]);
+              params_merged.push_back(params_queue_[i]);
+
+              last_preserved_idx = ts_merged.size() - 1;
+              preserved_any = true;
+            } else {
+              break;
+            }
+          }
+
+          // --- Decide behaviour for MERGE ---
+          if (!interpolation_ || interpolation_window_ == 0) {
+            // Global interpolation disabled -> plain merge
+            // std::cout << "Merging without interpolation (disabled)."
+            //           << std::endl;
+
+            for (std::size_t i = 0; i < ts_new.size(); ++i) {
+              ts_merged.push_back(ts_new[i]);
+              dts_merged.push_back(dts_new[i]);
+              xs_merged.push_back(xs_new[i]);
+              dxs_merged.push_back(dxs_new[i]);
+              us_merged.push_back(us_new[i]);
+              Ks_merged.push_back(Ks_new[i]);
+              types_merged.push_back(types_new[i]);
+              params_merged.push_back(params_new[i]);
+            }
+
+            std::swap(ts_queue_, ts_merged);
+            std::swap(dts_queue_, dts_merged);
+            std::swap(xs_queue_, xs_merged);
+            std::swap(dxs_queue_, dxs_merged);
+            std::swap(us_queue_, us_merged);
+            std::swap(Ks_queue_, Ks_merged);
+            std::swap(types_queue_, types_merged);
+            std::swap(params_queue_, params_merged);
+
+          } else if (!preserved_any) {
+            // No prefix preserved -> this is effectively a REPLACE with
+            // interpolation
+            // std::cout << "Merge: no preserved prefix -> treating as REPLACE "
+            //              "with interpolation."
+            //           << std::endl;
+
+            if (!xs_queue_.empty()) {
+              const Eigen::VectorXd &x_old = xs_queue_.front();
+              const Eigen::VectorXd &dx_old = dxs_queue_.front();
+              const Eigen::VectorXd &u_old = us_queue_.front();
+              const Eigen::MatrixXd &K_old = Ks_queue_.front();
+
+              // Blend first M samples of NEW towards the old front
+              apply_blending(x_old, dx_old, u_old, K_old);
+            }
+
+            // Now fully REPLACE the queue with the (possibly blended) new
+            // trajectory
+            ts_queue_.clear();
+            dts_queue_.clear();
+            xs_queue_.clear();
+            dxs_queue_.clear();
+            us_queue_.clear();
+            Ks_queue_.clear();
+            types_queue_.clear();
+            params_queue_.clear();
+
+            for (std::size_t i = 0; i < ts_new.size(); ++i) {
+              ts_queue_.push_back(ts_new[i]);
+              dts_queue_.push_back(dts_new[i]);
+              xs_queue_.push_back(xs_new[i]);
+              dxs_queue_.push_back(dxs_new[i]);
+              us_queue_.push_back(us_new[i]);
+              Ks_queue_.push_back(Ks_new[i]);
+              types_queue_.push_back(types_new[i]);
+              params_queue_.push_back(params_new[i]);
+            }
+
+            goto after_merge; // skip the rest of MERGE, queue is already set
+
+          } else {
+            // Normal MERGE with interpolation: keep prefix, blend from last
+            // preserved sample
+            // std::cout << "Merging with interpolation." << std::endl;
+
+            const Eigen::VectorXd &x_old = xs_merged[last_preserved_idx];
+            const Eigen::VectorXd &dx_old = dxs_merged[last_preserved_idx];
+            const Eigen::VectorXd &u_old = us_merged[last_preserved_idx];
+            const Eigen::MatrixXd &K_old = Ks_merged[last_preserved_idx];
+
+            apply_blending(x_old, dx_old, u_old, K_old);
+
+            // Append (now blended) new trajectory
+            for (std::size_t i = 0; i < ts_new.size(); ++i) {
+              ts_merged.push_back(ts_new[i]);
+              dts_merged.push_back(dts_new[i]);
+              xs_merged.push_back(xs_new[i]);
+              dxs_merged.push_back(dxs_new[i]);
+              us_merged.push_back(us_new[i]);
+              Ks_merged.push_back(Ks_new[i]);
+              types_merged.push_back(types_new[i]);
+              params_merged.push_back(params_new[i]);
+            }
+
+            // Commit merged queue
+            std::swap(ts_queue_, ts_merged);
+            std::swap(dts_queue_, dts_merged);
+            std::swap(xs_queue_, xs_merged);
+            std::swap(dxs_queue_, dxs_merged);
+            std::swap(us_queue_, us_merged);
+            std::swap(Ks_queue_, Ks_merged);
+            std::swap(types_queue_, types_merged);
+            std::swap(params_queue_, params_merged);
           }
         }
-
-        // Append new message after preserved section
-        for (std::size_t i = 0; i < ts_new.size(); ++i) {
-          ts_merged.push_back(ts_new[i]);
-          dts_merged.push_back(dts_new[i]);
-          xs_merged.push_back(xs_new[i]);
-          dxs_merged.push_back(dxs_new[i]);
-          us_merged.push_back(us_new[i]);
-          Ks_merged.push_back(Ks_new[i]);
-          types_merged.push_back(types_new[i]);
-          params_merged.push_back(params_new[i]);
-        }
-
-        std::swap(ts_queue_, ts_merged);
-        std::swap(dts_queue_, dts_merged);
-        std::swap(xs_queue_, xs_merged);
-        std::swap(dxs_queue_, dxs_merged);
-        std::swap(us_queue_, us_merged);
-        std::swap(Ks_queue_, Ks_merged);
-        std::swap(types_queue_, types_merged);
-        std::swap(params_queue_, params_merged);
+      after_merge:
       }
     }
 
     // STEP 2: Determine if queue has a reference ready for execution
-    while (ts_queue_.size() >= 2 && ts_queue_.front() + dts_queue_.front() <= t_now) {
+
+    // Drop fully expired intervals
+    while (ts_queue_.size() >= 2 &&
+           ts_queue_.front() + dts_queue_.front() <= t_now) {
       ts_queue_.pop_front();
       dts_queue_.pop_front();
       xs_queue_.pop_front();
@@ -433,8 +577,8 @@ private:
   SolverTrajectory msg_;   //!< Solver trajectory message
   bool has_new_msg_;       //!< Indcate when a new message has been received
   bool is_processing_msg_; //!< Indicate when we are processing the message
-  double last_msg_time_; //!< Last message time needed to ensure each message is
-                         //!< newer
+  double last_msg_time_;   //!< Last message time needed to ensure each message
+                           //!< is newer
   double communication_delay_;
   std::vector<double> ts_;
   std::vector<double> dts_;
@@ -453,8 +597,11 @@ private:
   std::deque<crocoddyl_msgs::ControlType> types_queue_;
   std::deque<crocoddyl_msgs::ControlParametrization> params_queue_;
 
-void callback(SolverTrajectorySharedPtr msg) {
-  if (!is_processing_msg_) {
+  bool interpolation_;
+  unsigned int interpolation_window_;
+
+  void callback(SolverTrajectorySharedPtr msg) {
+    if (!is_processing_msg_) {
 #ifdef ROS2
       double msg_time = rclcpp::Time(msg->header.stamp).seconds();
       double now = node_->get_clock()->now().seconds();
@@ -481,9 +628,9 @@ void callback(SolverTrajectorySharedPtr msg) {
                         << std::fixed << last_msg_time_
                         << ", current timestamp: " << msg_time);
 #endif
+      }
     }
   }
-}
 };
 
 } // namespace crocoddyl_msgs

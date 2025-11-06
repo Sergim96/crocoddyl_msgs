@@ -16,12 +16,8 @@ if(CATKIN_ENABLE_TESTING)
             ${Python3_INCLUDE_DIRS}
             ${Boost_INCLUDE_DIRS})
   target_link_libraries(
-    test_solver_queue
-    ${catkin_LIBRARIES}
-    ${PINOCCHIO_LIBRARIES}
-    ${pybind11_catkin_LIBRARIES}
-    ${Python3_LIBRARIES}
-    ${Boost_PYTHON_LIBRARY})
+    test_solver_queue ${catkin_LIBRARIES} ${PINOCCHIO_LIBRARIES}
+    ${pybind11_catkin_LIBRARIES} ${Python3_LIBRARIES} ${Boost_PYTHON_LIBRARY})
 
   # -----------------------
   # Python Tests (ROS1)
@@ -32,7 +28,7 @@ if(CATKIN_ENABLE_TESTING)
     add_rostest(crocoddyl_msgs.test ARGS test_name:=${TEST})
   endforeach(TEST ${${PROJECT_NAME}_PYTHON_TESTS})
 
-else()  # ROS2
+else() # ROS2
   # -----------------------
   # Python Tests (ROS2)
   # -----------------------

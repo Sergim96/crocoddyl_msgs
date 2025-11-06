@@ -135,8 +135,18 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
   py::class_<SolverTrajectoryRosSubscriber,
              std::unique_ptr<SolverTrajectoryRosSubscriber, py::nodelete>>(
       m, "SolverTrajectoryRosSubscriber")
-      .def(py::init<const std::string &>(),
-           py::arg("topic") = "/crocoddyl/solver_trajectory")
+      .def(py::init<const std::string &, bool, unsigned int>(),
+           py::arg("topic") = "/crocoddyl/solver_trajectory",
+           py::arg("interpolation") = false,
+           py::arg("interpolation_window") = 0,
+           R"doc(
+          Initialize the solver trajectory subscriber.
+
+          :param topic: ROS topic name for SolverTrajectory messages.
+          :param interpolation: If True, linearly blends old and new references when trajectories
+                              are replaced/appended/merged to reduce jumps in the reference.
+          :param interpolation_window: Duration [nodes] of the interpolation window.
+          )doc")
       .def("get_solver_trajectory",
            &SolverTrajectoryRosSubscriber::get_solver_trajectory,
            "Get the latest solver trajectory.\n\n"
