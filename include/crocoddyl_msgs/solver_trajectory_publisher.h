@@ -11,8 +11,8 @@
 
 #include "crocoddyl_msgs/conversions.h"
 
+#include "crocoddyl_msgs/realtime_publisher_compat.h"
 #include <Eigen/Dense>
-#include <realtime_tools/realtime_publisher.h>
 
 #ifdef ROS2
 #include "crocoddyl_msgs/msg/solver_trajectory.hpp"
@@ -36,7 +36,10 @@ public:
       const std::string &topic = "/crocoddyl/solver_trajectory",
       const std::string &frame = "odom")
 #ifdef ROS2
-      : node_("solver_trajectory_publisher"),
+      : node_("solver_trajectory_publisher",
+              // Keep the private publisher and subscriber in the same system
+              // time domain regardless of the embedding process' ROS args.
+              rclcpp::NodeOptions().use_global_arguments(false)),
         pub_(node_.create_publisher<crocoddyl_msgs::msg::SolverTrajectory>(
             topic, 1)) {
     RCLCPP_INFO_STREAM(node_.get_logger(),
@@ -49,7 +52,11 @@ public:
     ROS_INFO_STREAM("Publishing SolverTrajectory messages on "
                     << topic << " (frame: " << frame << ")");
 #endif
+#ifdef ROS2
+    msg_.header.frame_id = frame;
+#else
     pub_.msg_.header.frame_id = frame;
+#endif
   }
   ~SolverTrajectoryRosPublisher() = default;
 
@@ -74,61 +81,75 @@ public:
                const std::vector<Eigen::MatrixXd> &Ks = {},
                const std::vector<ControlType> &types = {},
                const std::vector<ControlParametrization> &params = {}) {
-    if (pub_.trylock()) {
-      if (ts.size() != dts.size()) {
-        throw std::invalid_argument("The size of the ts vector needs to equal "
-                                    "the size of the dts vector.");
-      }
-      if (ts.size() != xs.size()) {
-        throw std::invalid_argument("The size of the ts vector needs to equal "
-                                    "the size of the xs vector.");
-      }
-      if (ts.size() != dxs.size()) {
-        throw std::invalid_argument("The size of the ts vector needs to equal "
-                                    "the size of the dxs vector.");
-      }
-      if (us.size() != 0 && ts.size() != us.size()) {
-        throw std::invalid_argument("The size of the ts vector needs to equal "
-                                    "the size of the us vector.");
-      }
-      if (Ks.size() != 0 && ts.size() != Ks.size()) {
-        throw std::invalid_argument("The size of the ts vector needs to equal "
-                                    "the size of the Ks vector.");
-      }
-      if (types.size() != 0 && ts.size() != types.size()) {
-        throw std::invalid_argument("The size of the ts vector needs to equal "
-                                    "the size of the types.");
-      }
-      if (params.size() != 0 && ts.size() != params.size()) {
-        throw std::invalid_argument("The size of the ts vector needs to equal "
-                                    "the size of the params.");
-      }
-      const std::size_t N = ts.size();
-#ifdef ROS2
-      pub_.msg_.header.stamp = node_.now();
-#else
-      pub_.msg_.header.stamp = ros::Time::now();
-#endif
-      pub_.msg_.intervals.resize(N);
-      pub_.msg_.state_trajectory.resize(N);
-      pub_.msg_.control_trajectory.resize(N);
-      for (std::size_t i = 0; i < N; ++i) {
-        pub_.msg_.intervals[i].time = ts[i];
-        pub_.msg_.intervals[i].duration = dts[i];
-        crocoddyl_msgs::toMsg(pub_.msg_.state_trajectory[i], xs[i], dxs[i]);
-        crocoddyl_msgs::toMsg(pub_.msg_.control_trajectory[i], us[i], Ks[i],
-                              types[i], params[i]);
-      }
-      pub_.unlockAndPublish();
+    if (ts.size() != dts.size()) {
+      throw std::invalid_argument("The size of the ts vector needs to equal "
+                                  "the size of the dts vector.");
     }
+    if (ts.size() != xs.size()) {
+      throw std::invalid_argument("The size of the ts vector needs to equal "
+                                  "the size of the xs vector.");
+    }
+    if (ts.size() != dxs.size()) {
+      throw std::invalid_argument("The size of the ts vector needs to equal "
+                                  "the size of the dxs vector.");
+    }
+    if (us.size() != 0 && ts.size() != us.size()) {
+      throw std::invalid_argument("The size of the ts vector needs to equal "
+                                  "the size of the us vector.");
+    }
+    if (Ks.size() != 0 && ts.size() != Ks.size()) {
+      throw std::invalid_argument("The size of the ts vector needs to equal "
+                                  "the size of the Ks vector.");
+    }
+    if (types.size() != 0 && ts.size() != types.size()) {
+      throw std::invalid_argument("The size of the ts vector needs to equal "
+                                  "the size of the types.");
+    }
+    if (params.size() != 0 && ts.size() != params.size()) {
+      throw std::invalid_argument("The size of the ts vector needs to equal "
+                                  "the size of the params.");
+    }
+
+#ifdef ROS2
+    // Caracal calls this publisher from its non-real-time MPC thread.  A
+    // nonblocking real-time publisher can silently discard a large trajectory
+    // while its worker is busy, making a healthy MPC appear stale to the
+    // tracking controller.  Publish directly so every completed horizon is
+    // handed to rclcpp's middleware queue.
+    auto &message = msg_;
+    message.header.stamp = node_.now();
+#else
+    if (!pub_.trylock()) {
+      return;
+    }
+    auto &message = pub_.msg_;
+    message.header.stamp = ros::Time::now();
+#endif
+    const std::size_t N = ts.size();
+    message.intervals.resize(N);
+    message.state_trajectory.resize(N);
+    message.control_trajectory.resize(N);
+    for (std::size_t i = 0; i < N; ++i) {
+      message.intervals[i].time = ts[i];
+      message.intervals[i].duration = dts[i];
+      crocoddyl_msgs::toMsg(message.state_trajectory[i], xs[i], dxs[i]);
+      crocoddyl_msgs::toMsg(message.control_trajectory[i], us[i], Ks[i],
+                            types[i], params[i]);
+    }
+#ifdef ROS2
+    pub_->publish(message);
+#else
+    pub_.unlockAndPublish();
+#endif
   }
 
 private:
 #ifdef ROS2
   rclcpp::Node node_;
-  realtime_tools::RealtimePublisher<crocoddyl_msgs::msg::SolverTrajectory> pub_;
+  rclcpp::Publisher<crocoddyl_msgs::msg::SolverTrajectory>::SharedPtr pub_;
+  crocoddyl_msgs::msg::SolverTrajectory msg_;
 #else
-  realtime_tools::RealtimePublisher<crocoddyl_msgs::SolverTrajectory> pub_;
+  RealtimePublisherCompat<crocoddyl_msgs::SolverTrajectory> pub_;
 #endif
 };
 

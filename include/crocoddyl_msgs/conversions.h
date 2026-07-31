@@ -149,53 +149,83 @@ void updateBodyInertialParameters(
     const std::size_t frame_id = model.getFrameId(frame_name);
     switch (model.frames[frame_id].type) {
     case pinocchio::FrameType::JOINT: {
-      const std::size_t joint_id = model.getJointId(frame_name);
+      const std::size_t joint_id = model.frames[frame_id].parentJoint;
       model.inertias[joint_id] = pinocchio::Inertia::FromDynamicParameters(psi);
     } break;
     case pinocchio::FrameType::BODY: {
-// TODO: Update Pinocchio version after releasing
-// https://github.com/stack-of-tasks/pinocchio/pull/2204
-#if (PINOCCHIO_MAJOR_VERSION >= 2 && PINOCCHIO_MINOR_VERSION >= 7 &&           \
-     PINOCCHIO_PATCH_VERSION >= 1)
-      const std::size_t fixed_joint_id = model.frames[frame_id].previousFrame;
-      const std::size_t joint_id = model.frames[fixed_joint_id].parent;
-      const pinocchio::SE3 &jMb = model.frames[fixed_joint_id].placement;
       const pinocchio::Inertia &I_updated =
           pinocchio::Inertia::FromDynamicParameters(psi);
-      const pinocchio::Inertia &dI =
-          I_updated - model.frames[fixed_joint_id].inertia;
-      model.frames[fixed_joint_id].inertia = I_updated;
-      model.inertias[joint_id] += jMb.act(dI);
-#else
-      std::invalid_argument("The installed Pinocchio version doesn't support "
-                            "minus operators in inertia needed for " +
-                            frame_name);
-#endif
+      const std::size_t parent_frame_id = model.frames[frame_id].parentFrame;
+
+      if (model.frames[parent_frame_id].type ==
+          pinocchio::FrameType::FIXED_JOINT) {
+        // URDF fixed links keep their individual inertia on the fixed-joint
+        // frame.  The BODY frame itself is only a kinematic alias.
+        auto &fixed_frame = model.frames[parent_frame_id];
+        const std::size_t joint_id = fixed_frame.parentJoint;
+        Vector10d joint_parameters =
+            model.inertias[joint_id].toDynamicParameters();
+        joint_parameters -= fixed_frame.placement.act(fixed_frame.inertia)
+                                .toDynamicParameters();
+        joint_parameters +=
+            fixed_frame.placement.act(I_updated).toDynamicParameters();
+        fixed_frame.inertia = I_updated;
+        model.inertias[joint_id] =
+            pinocchio::Inertia::FromDynamicParameters(joint_parameters);
+      } else {
+        // Pinocchio 4.1 folds a directly joint-attached body's inertia into the
+        // parent joint. Recover that contribution by subtracting every fixed
+        // body already aggregated into the same joint, then replace it.
+        auto &body_frame = model.frames[frame_id];
+        const std::size_t joint_id = body_frame.parentJoint;
+        Vector10d current_joint_body_parameters =
+            model.inertias[joint_id].toDynamicParameters();
+        for (const auto &frame : model.frames) {
+          if (frame.type == pinocchio::FrameType::FIXED_JOINT &&
+              frame.parentJoint == joint_id) {
+            current_joint_body_parameters -=
+                frame.placement.act(frame.inertia).toDynamicParameters();
+          }
+        }
+        const pinocchio::Inertia current_joint_body =
+            pinocchio::Inertia::FromDynamicParameters(
+                current_joint_body_parameters);
+        const pinocchio::Inertia I_current =
+            body_frame.placement.actInv(current_joint_body);
+        Vector10d joint_parameters =
+            model.inertias[joint_id].toDynamicParameters();
+        joint_parameters -=
+            body_frame.placement.act(I_current).toDynamicParameters();
+        joint_parameters +=
+            body_frame.placement.act(I_updated).toDynamicParameters();
+        model.inertias[joint_id] =
+            pinocchio::Inertia::FromDynamicParameters(joint_parameters);
+        // Preserve the per-body value as metadata. Pinocchio algorithms use
+        // model.inertias; Frame::inertia is not processed after addFrame().
+        body_frame.inertia = I_updated;
+      }
     } break;
     case pinocchio::FrameType::FIXED_JOINT: {
-#if (PINOCCHIO_MAJOR_VERSION >= 2 && PINOCCHIO_MINOR_VERSION >= 7 &&           \
-     PINOCCHIO_PATCH_VERSION >= 1)
-      const std::size_t joint_id = model.frames[frame_id].parent;
+      const std::size_t joint_id = model.frames[frame_id].parentJoint;
       const pinocchio::SE3 &jMb = model.frames[frame_id].placement;
       const pinocchio::Inertia &I_updated =
           pinocchio::Inertia::FromDynamicParameters(psi);
-      const pinocchio::Inertia &dI = I_updated - model.frames[frame_id].inertia;
+      Vector10d joint_parameters =
+          model.inertias[joint_id].toDynamicParameters();
+      joint_parameters -=
+          jMb.act(model.frames[frame_id].inertia).toDynamicParameters();
+      joint_parameters += jMb.act(I_updated).toDynamicParameters();
       model.frames[frame_id].inertia = I_updated;
-      model.inertias[joint_id] += jMb.act(dI);
-#else
-      std::invalid_argument("The installed Pinocchio version doesn't support "
-                            "minus operators in inertia needed for " +
-                            frame_name);
-#endif
+      model.inertias[joint_id] =
+          pinocchio::Inertia::FromDynamicParameters(joint_parameters);
     } break;
     default: {
-      std::invalid_argument("The type of frame " + frame_name +
-                            " is not supported");
-      break;
+      throw std::invalid_argument("The type of frame " + frame_name +
+                                  " is not supported");
     }
     }
   } else {
-    std::invalid_argument("Doesn't exist " + frame_name + " frame");
+    throw std::invalid_argument("Doesn't exist " + frame_name + " frame");
   }
 }
 
@@ -221,26 +251,40 @@ const Vector10d getBodyInertialParameters(
     const std::size_t frame_id = model.getFrameId(frame_name);
     switch (model.frames[frame_id].type) {
     case pinocchio::FrameType::JOINT: {
-      const std::size_t joint_id = model.getJointId(frame_name);
+      const std::size_t joint_id = model.frames[frame_id].parentJoint;
       return model.inertias[joint_id].toDynamicParameters();
     } break;
     case pinocchio::FrameType::BODY: {
-      const std::size_t fixed_joint_id = model.frames[frame_id].previousFrame;
-      return model.frames[fixed_joint_id].inertia.toDynamicParameters();
+      const auto &body_frame = model.frames[frame_id];
+      const std::size_t parent_frame_id = body_frame.parentFrame;
+      if (model.frames[parent_frame_id].type ==
+          pinocchio::FrameType::FIXED_JOINT) {
+        return model.frames[parent_frame_id].inertia.toDynamicParameters();
+      }
+
+      Vector10d joint_body_parameters =
+          model.inertias[body_frame.parentJoint].toDynamicParameters();
+      for (const auto &frame : model.frames) {
+        if (frame.type == pinocchio::FrameType::FIXED_JOINT &&
+            frame.parentJoint == body_frame.parentJoint) {
+          joint_body_parameters -=
+              frame.placement.act(frame.inertia).toDynamicParameters();
+        }
+      }
+      const pinocchio::Inertia joint_body =
+          pinocchio::Inertia::FromDynamicParameters(joint_body_parameters);
+      return body_frame.placement.actInv(joint_body).toDynamicParameters();
     } break;
     case pinocchio::FrameType::FIXED_JOINT: {
       return model.frames[frame_id].inertia.toDynamicParameters();
     } break;
     default: {
-      std::invalid_argument("The type of frame " + frame_name +
-                            " is not supported");
-      return NAN * Vector10d::Ones();
-      break;
+      throw std::invalid_argument("The type of frame " + frame_name +
+                                  " is not supported");
     }
     }
   } else {
-    std::invalid_argument("Doesn't exist " + frame_name + " frame");
-    return NAN * Vector10d::Ones();
+    throw std::invalid_argument("Doesn't exist " + frame_name + " frame");
   }
 }
 

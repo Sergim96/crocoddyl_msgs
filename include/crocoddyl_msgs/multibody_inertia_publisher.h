@@ -11,7 +11,7 @@
 
 #include "crocoddyl_msgs/conversions.h"
 
-#include <realtime_tools/realtime_publisher.h>
+#include "crocoddyl_msgs/realtime_publisher_compat.h"
 
 #ifdef ROS2
 #include <rclcpp/rclcpp.hpp>
@@ -86,7 +86,7 @@ private:
 #ifdef ROS2
   rclcpp::Node node_;
 #endif
-  realtime_tools::RealtimePublisher<MultibodyInertia> pub_;
+  RealtimePublisherCompat<MultibodyInertia> pub_;
 };
 
 } // namespace crocoddyl_msgs

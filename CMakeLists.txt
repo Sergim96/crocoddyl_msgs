@@ -1,5 +1,13 @@
-cmake_minimum_required(VERSION 3.3)
+cmake_minimum_required(VERSION 3.10)
 project(crocoddyl_msgs)
+
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  set(CMAKE_BUILD_TYPE
+      Release
+      CACHE STRING "Build type" FORCE)
+  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release
+                                               RelWithDebInfo MinSizeRel)
+endif()
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "(GNU|Clang)")
   add_compile_options(-Wall -Wextra -Wpedantic -Wno-sign-conversion)
@@ -19,21 +27,20 @@ message(STATUS "Released under the BSD 3-Clause License.")
 
 # Find required packages
 find_package(Eigen3 REQUIRED)
-find_package(pinocchio 2.6.18 REQUIRED)
+find_package(pinocchio 4.1.0 EXACT REQUIRED)
 
 # Define the Python modules
 set(${PROJECT_NAME}_PYBIND11_MODULE crocoddyl_ros)
-include_directories(
-  $ENV{CONDA_PREFIX}/lib/python3.11/site-packages/numpy/core/include)
 if($ENV{ROS_VERSION} EQUAL 2) # ROS 2
   add_definitions(-DROS2)
-  # Default to C++14
+  # The queue implementation uses structured bindings and std::clamp.
   if(NOT CMAKE_CXX_STANDARD)
-    set(CMAKE_CXX_STANDARD 14)
+    set(CMAKE_CXX_STANDARD 17)
   endif()
   # Find ROS2 required packages
-  set(PACKAGE_DEPENDENCIES rclcpp std_msgs whole_body_state_msgs realtime_tools
-                           pybind11)
+  option(CROCODDYL_MSGS_BUILD_PYTHON
+         "Build the crocoddyl_msgs Python publisher/subscriber bindings" ON)
+  set(PACKAGE_DEPENDENCIES rclcpp std_msgs geometry_msgs whole_body_state_msgs)
   find_package(ament_cmake REQUIRED)
   find_package(rosidl_default_generators REQUIRED)
   foreach(DEPENDENCY IN ITEMS ${PACKAGE_DEPENDENCIES})
@@ -52,33 +59,58 @@ if($ENV{ROS_VERSION} EQUAL 2) # ROS 2
     "msg/MultibodyInertia.msg"
     DEPENDENCIES
     std_msgs
+    geometry_msgs
     whole_body_state_msgs)
   # Add warning definitions
-  if(APPLE AND ${pybind11_VERSION} VERSION_LESS "2.10.3")
-    add_definitions(-DCROCODDYL_MSG_DISABLE_PYBIND11_WARNINGS)
+  if(CROCODDYL_MSGS_BUILD_PYTHON)
+    find_package(ament_cmake_python REQUIRED)
+    find_package(Boost REQUIRED COMPONENTS python314)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter Development NumPy)
+    find_package(pybind11 REQUIRED)
+    find_package(realtime_tools REQUIRED)
+    ament_get_python_install_dir(PYTHON_INSTALL_DIR)
+
+    if(APPLE AND ${pybind11_VERSION} VERSION_LESS "2.10.3")
+      add_definitions(-DCROCODDYL_MSG_DISABLE_PYBIND11_WARNINGS)
+    endif()
+    # Build the Python interface for the ROS publisher and subscriber
+    foreach(PYBIND11_MODULE ${${PROJECT_NAME}_PYBIND11_MODULE})
+      pybind11_add_module(${PYBIND11_MODULE} MODULE src/${PYBIND11_MODULE}.cpp)
+      target_include_directories(
+        ${PYBIND11_MODULE}
+        PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+               $<INSTALL_INTERFACE:include>)
+      rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME}
+                                    rosidl_typesupport_cpp)
+      target_link_libraries(
+        ${PYBIND11_MODULE}
+        PUBLIC ${cpp_typesupport_target}
+               Boost::python314
+               Eigen3::Eigen
+               Python3::Python
+               Python3::NumPy
+               pinocchio::pinocchio
+               rclcpp::rclcpp
+               std_msgs::std_msgs
+               geometry_msgs::geometry_msgs
+               whole_body_state_msgs::whole_body_state_msgs
+               realtime_tools::realtime_tools)
+      set_target_properties(
+        ${PYBIND11_MODULE} PROPERTIES LIBRARY_OUTPUT_DIRECTORY
+                                      lib/${PROJECT_NAME})
+      install(TARGETS ${PYBIND11_MODULE}
+              LIBRARY DESTINATION ${PYTHON_INSTALL_DIR})
+    endforeach(PYBIND11_MODULE ${${PROJECT_NAME}_PYBIND11_MODULE})
   endif()
-  # Build the Python interface for the ROS publisher and subscriber
-  foreach(PYBIND11_MODULE ${${PROJECT_NAME}_PYBIND11_MODULE})
-    pybind11_add_module(${PYBIND11_MODULE} MODULE src/${PYBIND11_MODULE}.cpp)
-    target_include_directories(
-      ${PYBIND11_MODULE}
-      PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-             ${EIGEN3_INCLUDE_DIR} $<INSTALL_INTERFACE:include>)
-    ament_target_dependencies(${PYBIND11_MODULE} PUBLIC ${PACKAGE_DEPENDENCIES})
-    rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME}
-                                  rosidl_typesupport_cpp)
-    target_link_libraries(
-      ${PYBIND11_MODULE} PUBLIC ${cpp_typesupport_target} ${Boost_LIBRARIES}
-                                ${Boost_PYTHON_LIBRARY} pinocchio::pinocchio)
-    set_target_properties(${PYBIND11_MODULE} PROPERTIES LIBRARY_OUTPUT_DIRECTORY
-                                                        lib/${PROJECT_NAME})
-    install(TARGETS ${PYBIND11_MODULE}
-            LIBRARY DESTINATION ${PYTHON_INSTALL_DIR})
-  endforeach(PYBIND11_MODULE ${${PROJECT_NAME}_PYBIND11_MODULE})
   # Install the include files
   install(DIRECTORY include/${PROJECT_NAME}/
           DESTINATION include/${PROJECT_NAME})
-  ament_export_dependencies(rosidl_default_runtime)
+  ament_export_include_directories(include)
+  ament_export_dependencies(rosidl_default_runtime rclcpp realtime_tools
+                            whole_body_state_msgs)
+  if(BUILD_TESTING)
+    add_subdirectory(unittest)
+  endif()
   ament_package()
 else() # ROS 1
   # Find ROS1 required packages
@@ -133,6 +165,7 @@ else() # ROS 1
   # Install the include files
   install(DIRECTORY include/${PROJECT_NAME}/
           DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})
+  if(BUILD_TESTING)
+    add_subdirectory(unittest)
+  endif()
 endif()
-
-add_subdirectory(unittest)

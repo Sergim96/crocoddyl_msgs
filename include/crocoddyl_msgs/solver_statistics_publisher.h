@@ -9,7 +9,7 @@
 #ifndef CROCODDYL_MSG_SOLVER_STATISTICS_PUBLISHER_H_
 #define CROCODDYL_MSG_SOLVER_STATISTICS_PUBLISHER_H_
 
-#include <realtime_tools/realtime_publisher.h>
+#include "crocoddyl_msgs/realtime_publisher_compat.h"
 
 #ifdef ROS2
 #include "crocoddyl_msgs/msg/solver_statistics.hpp"
@@ -84,9 +84,9 @@ public:
 private:
 #ifdef ROS2
   rclcpp::Node node_;
-  realtime_tools::RealtimePublisher<crocoddyl_msgs::msg::SolverStatistics> pub_;
+  RealtimePublisherCompat<crocoddyl_msgs::msg::SolverStatistics> pub_;
 #else
-  realtime_tools::RealtimePublisher<crocoddyl_msgs::SolverStatistics> pub_;
+  RealtimePublisherCompat<crocoddyl_msgs::SolverStatistics> pub_;
 #endif
 };
 

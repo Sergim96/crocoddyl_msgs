@@ -42,13 +42,25 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
   int argc = 0;
   char **argv = nullptr;
 #ifdef ROS2
-  rclcpp::init(argc, argv);
+  // Python applications already install their own signal handlers through
+  // rclpy. Keeping a second asynchronous rclcpp handler creates a shutdown
+  // race between the two contexts and their executor threads.
+  rclcpp::init(argc, argv, rclcpp::InitOptions(),
+               rclcpp::SignalHandlerOptions::None);
 #else
   ros::init(argc, argv, "crocoddyl_ros", ros::init_options::AnonymousName);
 #endif
 
   m.doc() = "Python interface for publishing and subscribing efficiently to "
             "Crocoddyl messages in ROS.";
+
+#ifdef ROS2
+  m.def("shutdown", []() {
+    if (rclcpp::ok()) {
+      rclcpp::shutdown();
+    }
+  });
+#endif
 
   py::enum_<ControlType>(m, "ControlType")
       .value("EFFORT", ControlType::EFFORT)
@@ -132,9 +144,7 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
            py::arg("types") = std::vector<ControlType>(),
            py::arg("params") = std::vector<ControlParametrization>());
 
-  py::class_<SolverTrajectoryRosSubscriber,
-             std::unique_ptr<SolverTrajectoryRosSubscriber, py::nodelete>>(
-      m, "SolverTrajectoryRosSubscriber")
+  py::class_<SolverTrajectoryRosSubscriber>(m, "SolverTrajectoryRosSubscriber")
       .def(py::init<const std::string &, bool, unsigned int>(),
            py::arg("topic") = "/crocoddyl/solver_trajectory",
            py::arg("interpolation") = false,

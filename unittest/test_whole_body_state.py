@@ -85,6 +85,24 @@ class TestWholeBodyStateAbstract(unittest.TestCase):
             "rleg_effector_body": [np.random.rand(3), random.uniform(0, 1)],
         }
 
+    def assert_inertial_update(self, pub, sub, frame_name, expected):
+        # JOINT and BODY frames can be aliases for the same physical inertia.
+        # Check each write immediately; checking all aliases after a batch of
+        # writes incorrectly expects one model slot to retain several values.
+        for owner, endpoint in (("publisher", pub), ("subscriber", sub)):
+            obtained = endpoint.get_body_inertial_parameters(frame_name)
+            self.assertTrue(
+                np.allclose(obtained, expected, atol=1e-9),
+                "Wrong "
+                + owner
+                + "'s inertial parameters in frame "
+                + frame_name
+                + "\ndesired:\n"
+                + str(expected)
+                + "\nobtained:\n"
+                + str(obtained),
+            )
+
     def test_publisher_without_contact(self):
         sub = WholeBodyStateRosSubscriber(
             self.MODEL, "whole_body_state_without_contact"
@@ -315,12 +333,11 @@ class TestWholeBodyStateAbstract(unittest.TestCase):
             frame_names = [
                 f.name for f in self.MODEL.frames if f.type == pinocchio.JOINT
             ]
-        new_parameters = []
         for name in frame_names:
             psi = pinocchio.Inertia.Random().toDynamicParameters()
-            new_parameters.append(psi)
             pub.update_body_inertial_parameters(name, psi)
             sub.update_body_inertial_parameters(name, psi)
+            self.assert_inertial_update(pub, sub, name, psi)
         # publish whole-body state messages
         nv_root = getRootNv(self.MODEL)
         q = pinocchio.randomConfiguration(self.MODEL)
@@ -330,38 +347,6 @@ class TestWholeBodyStateAbstract(unittest.TestCase):
             pub.publish(self.t, q, v, tau, self.p, self.pd, self.f, self.s)
             if sub.has_new_msg():
                 break
-        # get inertias
-        for i, name in enumerate(frame_names):
-            pub_parameters = pub.get_body_inertial_parameters(name)
-            sub_parameters = sub.get_body_inertial_parameters(name)
-            self.assertTrue(
-                np.allclose(
-                    pub_parameters,
-                    new_parameters[i],
-                    atol=1e-9,
-                ),
-                "Wrong publisher's inertial parameters in frame "
-                + name
-                + "\n"
-                + "desired:\n"
-                + str(new_parameters[i])
-                + "obtained:\n"
-                + str(pub_parameters),
-            )
-            self.assertTrue(
-                np.allclose(
-                    sub_parameters,
-                    new_parameters[i],
-                    atol=1e-9,
-                ),
-                "Wrong subscriber's inertial parameters in frame "
-                + name
-                + "\n"
-                + "desired:\n"
-                + str(new_parameters[i])
-                + "obtained:\n"
-                + str(sub_parameters),
-            )
         # get whole-body state
         _t, _q, _v, _tau, _p, _pd, _f, _s = sub.get_state()
         qdiff = pinocchio.difference(self.MODEL, q, _q)
@@ -433,12 +418,11 @@ class TestWholeBodyStateAbstract(unittest.TestCase):
             frame_names = [
                 f.name for f in reduced_model.frames if f.type == pinocchio.JOINT
             ]
-        new_parameters = []
         for name in frame_names:
             psi = pinocchio.Inertia.Random().toDynamicParameters()
-            new_parameters.append(psi)
             pub.update_body_inertial_parameters(name, psi)
             sub.update_body_inertial_parameters(name, psi)
+            self.assert_inertial_update(pub, sub, name, psi)
         # publish whole-body state messages
         nv_root = getRootNv(self.MODEL)
         q = pinocchio.randomConfiguration(self.MODEL)
@@ -449,38 +433,6 @@ class TestWholeBodyStateAbstract(unittest.TestCase):
             pub.publish(self.t, q, v, tau, self.p, self.pd, self.f, self.s)
             if sub.has_new_msg():
                 break
-        # get inertias
-        for i, name in enumerate(frame_names):
-            pub_parameters = pub.get_body_inertial_parameters(name)
-            sub_parameters = sub.get_body_inertial_parameters(name)
-            self.assertTrue(
-                np.allclose(
-                    pub_parameters,
-                    new_parameters[i],
-                    atol=1e-9,
-                ),
-                "Wrong publisher's inertial parameters in frame "
-                + name
-                + "\n"
-                + "desired:\n"
-                + str(new_parameters[i])
-                + "obtained:\n"
-                + str(pub_parameters),
-            )
-            self.assertTrue(
-                np.allclose(
-                    sub_parameters,
-                    new_parameters[i],
-                    atol=1e-9,
-                ),
-                "Wrong subscriber's inertial parameters in frame "
-                + name
-                + "\n"
-                + "desired:\n"
-                + str(new_parameters[i])
-                + "obtained:\n"
-                + str(sub_parameters),
-            )
         # get whole-body state
         _t, _q, _v, _tau, _p, _pd, _f, _s = sub.get_state()
         qdiff = pinocchio.difference(reduced_model, q, _q)
@@ -548,6 +500,7 @@ if __name__ == "__main__":
         big_suite = unittest.TestSuite(suites_list)
         runner = unittest.TextTestRunner()
         results = runner.run(big_suite)
+        raise SystemExit(0 if results.wasSuccessful() else 1)
     else:
         for test_class in test_classes_to_run:
             rosunit.unitrun("crocoddyl_msgs", "whole_body_state", test_class)

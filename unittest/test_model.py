@@ -221,6 +221,7 @@ if __name__ == "__main__":
         big_suite = unittest.TestSuite(suites_list)
         runner = unittest.TextTestRunner()
         results = runner.run(big_suite)
+        raise SystemExit(0 if results.wasSuccessful() else 1)
     else:
         for test_class in test_classes_to_run:
             rosunit.unitrun("crocoddyl_msgs", "model", test_class)

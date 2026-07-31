@@ -21,11 +21,13 @@
   <depend condition="$ROS_VERSION == 2">rclcpp</depend>
   <depend>eigen</depend>
   <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
   <depend>whole_body_state_msgs</depend>
   <depend>realtime_tools</depend>
   <depend condition="$ROS_VERSION == 1">pybind11_catkin</depend>
   <depend condition="$ROS_VERSION == 2">pybind11_vendor</depend>
-  <depend>pinocchio</depend>
+  <depend condition="$ROS_VERSION == 2">boost</depend>
+  <depend version_eq="4.1.0">pinocchio</depend>
 
   <!-- build dependencies -->
   <build_depend condition="$ROS_VERSION == 1">rospy</build_depend>
@@ -44,7 +46,7 @@
 
   <!-- test dependencies -->
   <test_depend condition="$ROS_VERSION == 1">rostest</test_depend>
-  <test_depend>pinocchio</test_depend>
+  <test_depend condition="$ROS_VERSION == 2">ament_cmake_gtest</test_depend>
 
   <export>
     <!-- This suffers from a bug in catkin, cf.: https://github.com/ros/catkin/issues/1170 -->

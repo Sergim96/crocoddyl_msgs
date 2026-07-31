@@ -10,7 +10,14 @@
 #define CROCODDYL_MSG_SOLVER_TRAJECTORY_SUBSCRIBER_H_
 
 #include "crocoddyl_msgs/conversions.h"
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <cmath>
 #include <deque>
+#include <functional>
+#include <thread>
+#include <utility>
 
 #include <Eigen/Dense>
 #include <mutex>
@@ -34,6 +41,9 @@ typedef const SolverTrajectory::ConstPtr &SolverTrajectorySharedPtr;
 
 class SolverTrajectoryRosSubscriber {
 public:
+  using StateInterpolator = std::function<Eigen::VectorXd(
+      const Eigen::VectorXd &, const Eigen::VectorXd &, double)>;
+
   /**
    * @brief Initialize the solver trajectory subscriber
    *
@@ -42,37 +52,52 @@ public:
    */
   SolverTrajectoryRosSubscriber(
       const std::string &topic = "/crocoddyl/solver_trajectory",
-      bool interpolation = false, unsigned int interpolation_window = 0)
+      bool interpolation = false, unsigned int interpolation_window = 0,
+      StateInterpolator state_interpolator = StateInterpolator())
 #ifdef ROS2
-      : node_(rclcpp::Node::make_shared("solver_trajectory_subscriber")),
-        interpolation_(interpolation),
-        interpolation_window_(interpolation_window),
+      : node_(rclcpp::Node::make_shared(
+            "solver_trajectory_subscriber",
+            // This helper owns its clock and executor.  Inheriting the host
+            // process' global use_sim_time override can put this clock in a
+            // different time domain from the equally private trajectory
+            // publisher, making every reference appear indefinitely future.
+            rclcpp::NodeOptions().use_global_arguments(false))),
         sub_(node_->create_subscription<SolverTrajectory>(
             topic, 1,
             std::bind(&SolverTrajectoryRosSubscriber::callback, this,
                       std::placeholders::_1))),
-        has_new_msg_(false), is_processing_msg_(false), last_msg_time_(0.),
-        communication_delay_(0.) {
+        has_new_msg_(false), last_msg_time_(0.), communication_delay_(0.),
+        interpolation_(interpolation),
+        interpolation_window_(interpolation_window),
+        state_interpolator_(std::move(state_interpolator)) {
     spinner_.add_node(node_);
     thread_ = std::thread([this]() { this->spin(); });
-    thread_.detach();
     RCLCPP_INFO_STREAM(node_->get_logger(),
                        "Subscribing SolverTrajectory messages on " << topic);
 #else
-      : node_(), spinner_(2), interpolation_(interpolation),
-        interpolation_window_(interpolation_window),
+      : node_(), spinner_(2),
         sub_(node_.subscribe<SolverTrajectory>(
             topic, 1, &SolverTrajectoryRosSubscriber::callback, this,
             ros::TransportHints().tcpNoDelay())),
-        has_new_msg_(false), is_processing_msg_(false), last_msg_time_(0.),
-        communication_delay_(0.) {
+        has_new_msg_(false), last_msg_time_(0.), communication_delay_(0.),
+        interpolation_(interpolation),
+        interpolation_window_(interpolation_window),
+        state_interpolator_(std::move(state_interpolator)) {
     // std::cout << "interpolation_window_: " << interpolation_window_
     //           << std::endl;
     spinner_.start();
     ROS_INFO_STREAM("Subscribing SolverTrajectory messages on " << topic);
 #endif
   }
-  ~SolverTrajectoryRosSubscriber() = default;
+  ~SolverTrajectoryRosSubscriber() {
+#ifdef ROS2
+    stop_requested_.store(true, std::memory_order_release);
+    spinner_.cancel();
+    if (thread_.joinable()) {
+      thread_.join();
+    }
+#endif
+  }
 
   /**
    * @brief Get the latest solver trajectory
@@ -87,46 +112,57 @@ public:
              std::vector<crocoddyl_msgs::ControlType>,
              std::vector<crocoddyl_msgs::ControlParametrization>>
   get_solver_trajectory() {
-    // start processing the message
-    is_processing_msg_ = true;
-    std::lock_guard<std::mutex> guard(mutex_);
-    const std::size_t N = msg_.intervals.size();
-    if (msg_.state_trajectory.size() != N) {
+    SolverTrajectory message;
+    {
+      std::lock_guard<std::mutex> guard(mutex_);
+      message = msg_;
+      has_new_msg_.store(false, std::memory_order_release);
+    }
+
+    const std::size_t N = message.intervals.size();
+    if (message.state_trajectory.size() != N) {
       throw std::invalid_argument(
           "The size of the state trajectory vector needs to equal "
           "the size of the intervals vector.");
     }
-    if (msg_.control_trajectory.size() != 0 &&
-        msg_.control_trajectory.size() != N) {
+    if (message.control_trajectory.size() != N) {
       throw std::invalid_argument(
           "The size of the control trajectory vector needs to equal "
           "the size of the intervals vector.");
     }
-    ts_.resize(N);
-    dts_.resize(N);
-    xs_.resize(N);
-    dxs_.resize(N);
-    us_.resize(N);
-    Ks_.resize(N);
-    types_.resize(N);
-    params_.resize(N);
+    std::vector<double> ts(N);
+    std::vector<double> dts(N);
+    std::vector<Eigen::VectorXd> xs(N);
+    std::vector<Eigen::VectorXd> dxs(N);
+    std::vector<Eigen::VectorXd> us(N);
+    std::vector<Eigen::MatrixXd> Ks(N);
+    std::vector<crocoddyl_msgs::ControlType> types(N);
+    std::vector<crocoddyl_msgs::ControlParametrization> params(N);
     for (std::size_t i = 0; i < N; ++i) {
-      const TimeInterval &interval = msg_.intervals[i];
-      const State &state = msg_.state_trajectory[i];
-      const Control &control = msg_.control_trajectory[i];
-      ts_[i] = interval.time;
-      dts_[i] = interval.duration;
-      xs_[i].resize(state.x.size());
-      dxs_[i].resize(state.dx.size());
-      us_[i].resize(control.u.size());
-      Ks_[i].resize(control.gain.nu, control.gain.nx);
-      crocoddyl_msgs::fromMsg(state, xs_[i], dxs_[i]);
-      crocoddyl_msgs::fromMsg(control, us_[i], Ks_[i], types_[i], params_[i]);
+      const TimeInterval &interval = message.intervals[i];
+      const State &state = message.state_trajectory[i];
+      const Control &control = message.control_trajectory[i];
+      if (!std::isfinite(interval.time) || !std::isfinite(interval.duration) ||
+          interval.duration <= 0.0 || (i > 0 && interval.time <= ts[i - 1])) {
+        throw std::invalid_argument(
+            "Trajectory timestamps must be finite and strictly increasing, "
+            "with finite positive durations.");
+      }
+      ts[i] = interval.time;
+      dts[i] = interval.duration;
+      xs[i].resize(state.x.size());
+      dxs[i].resize(state.dx.size());
+      us[i].resize(control.u.size());
+      Ks[i].resize(control.gain.nu, control.gain.nx);
+      crocoddyl_msgs::fromMsg(state, xs[i], dxs[i]);
+      crocoddyl_msgs::fromMsg(control, us[i], Ks[i], types[i], params[i]);
+      if (!xs[i].allFinite() || !dxs[i].allFinite() || !us[i].allFinite() ||
+          !Ks[i].allFinite()) {
+        throw std::invalid_argument(
+            "Trajectory state, control and feedback data must be finite.");
+      }
     }
-    // finish processing the message
-    is_processing_msg_ = false;
-    has_new_msg_ = false;
-    return {ts_, dts_, xs_, dxs_, us_, Ks_, types_, params_};
+    return {ts, dts, xs, dxs, us, Ks, types, params};
   }
 
   /**
@@ -169,11 +205,8 @@ public:
              Eigen::MatrixXd, crocoddyl_msgs::ControlType,
              crocoddyl_msgs::ControlParametrization>
   get_current_reference() {
-#ifdef ROS2
-    double now = node_->get_clock()->now().seconds();
-#else
-    double now = ros::Time::now().toSec();
-#endif
+    const double now = get_clock_time();
+    const double communication_delay = get_communication_delay();
 
     if (ts_queue_.empty()) {
       throw std::runtime_error("Reference queue is empty.");
@@ -181,7 +214,7 @@ public:
 
     double t0 = ts_queue_.front();
     double dt0 = dts_queue_.front();
-    double t_now = now - communication_delay_;
+    const double t_now = now - communication_delay;
 
     // Handle the case of only one element and it's too old
     if (ts_queue_.size() == 1 && t_now > t0 + dt0) {
@@ -222,7 +255,7 @@ public:
         << "No point ready. Waiting window not reached. \n"
         << "Next timestamp: " << t0 << "\n"
         << "Current time: " << now << "\n"
-        << "Communication delay: " << communication_delay_ << "\n"
+        << "Communication delay: " << communication_delay << "\n"
         << "Current time - delay: " << t_now << "\n"
         << "Time to wait: " << (t0 - t_now) << "s";
     throw std::runtime_error(oss.str());
@@ -240,24 +273,22 @@ public:
    * Behavior falls into four categories:
    *
    * 1. **Reject Old Message:**
-   *    If the new message starts significantly earlier than the current queue
-   *    (i.e. `t0_new + delay < t0_current`), it is rejected. This guards
-   * against receiving stale messages that are out of date.
+   *    A message whose last interval is already in the past is ignored.
    *
    * 2. **Replace (Same Start Time):**
    *    If the new message starts at approximately the same time as the current
-   * queue (within `communication_delay_`), the entire queue is cleared and
-   * replaced with the new one. This models re-planning from the same initial
-   * state.
+   * queue (within the measured communication delay), the entire queue is
+   * cleared and replaced with the new one. This models re-planning from the
+   * same initial state.
    *
    * 3. **Append (Starts After Current Ends):**
    *    If the new message starts after the current trajectory has finished
-   * executing (i.e. `tN_current + delay < t0_new`), the new message is appended
+   * executing, the new message is appended
    * to the end of the queue. This allows smooth extension of the current plan.
    *
    * 4. **Merge (Partial Overlap):**
    *    If the new message overlaps partially with the current queue, the prefix
-   * of the current queue up to `t0_new + delay` is preserved and the new
+   * of the current queue strictly before `t0_new` is preserved and the new
    * message is appended after that. This allows partial updates to a trajectory
    * in progress.
    *
@@ -271,17 +302,21 @@ public:
    */
 
   bool process_queue() {
-#ifdef ROS2
-    double now = node_->get_clock()->now().seconds();
-#else
-    double now = ros::Time::now().toSec();
-#endif
-    double t_now = now - communication_delay_;
+    bool ignored = false;
+    return process_queue_and_report(ignored);
+  }
+
+  bool process_queue_and_report(bool &processed_new_message) {
+    processed_new_message = false;
+    const bool pending_message = has_new_msg();
+    const double communication_delay = get_communication_delay();
+    const double t_now = get_clock_time() - communication_delay;
 
     // STEP 1: Handle new message if available
-    if (has_new_msg_) {
+    if (pending_message) {
       auto [ts_new, dts_new, xs_new, dxs_new, us_new, Ks_new, types_new,
             params_new] = get_solver_trajectory(); // by value, safe to modify
+      processed_new_message = true;
 
       if (ts_new.empty()) {
         throw std::runtime_error(
@@ -316,10 +351,27 @@ public:
               std::size_t M =
                   std::min<std::size_t>(interpolation_window_, xs_new.size());
               for (std::size_t i = 0; i < M; ++i) {
-                double alpha = static_cast<double>(i + 1) /
-                               static_cast<double>(M); // (0, 1]
+                const double alpha = static_cast<double>(i + 1) /
+                                     static_cast<double>(M); // (0, 1]
 
-                xs_new[i] = (1.0 - alpha) * x_old + alpha * xs_new[i];
+                if (state_interpolator_) {
+                  Eigen::VectorXd blended_state =
+                      state_interpolator_(x_old, xs_new[i], alpha);
+                  if (blended_state.size() != xs_new[i].size() ||
+                      !blended_state.allFinite()) {
+                    throw std::invalid_argument(
+                        "The state interpolator returned an invalid state.");
+                  }
+                  xs_new[i] = std::move(blended_state);
+                }
+                if (dx_old.size() != dxs_new[i].size() ||
+                    u_old.size() != us_new[i].size() ||
+                    K_old.rows() != Ks_new[i].rows() ||
+                    K_old.cols() != Ks_new[i].cols()) {
+                  throw std::invalid_argument(
+                      "Cannot blend trajectory samples with different "
+                      "tangent, control, or feedback dimensions.");
+                }
                 dxs_new[i] = (1.0 - alpha) * dx_old + alpha * dxs_new[i];
                 us_new[i] = (1.0 - alpha) * u_old + alpha * us_new[i];
                 Ks_new[i] = (1.0 - alpha) * K_old + alpha * Ks_new[i];
@@ -332,7 +384,8 @@ public:
             ts_queue_.empty() ? t0_new : ts_queue_.back() + dts_queue_.back();
 
         // 1) REPLACE (same start time)
-        if (std::abs(t0_new - t0_cur) < communication_delay_) {
+        const double timing_tolerance = std::max(communication_delay, 1e-9);
+        if (std::abs(t0_new - t0_cur) <= timing_tolerance) {
           // std::cout << "Replacing current trajectory." << std::endl;
 
           if (!ts_queue_.empty() && interpolation_ &&
@@ -358,7 +411,7 @@ public:
           params_queue_.assign(params_new.begin(), params_new.end());
 
           // 2) APPEND (new starts after current ends)
-        } else if (tN_cur + communication_delay_ < t0_new) {
+        } else if (tN_cur + timing_tolerance < t0_new) {
           // std::cout << "Appending current trajectory." << std::endl;
 
           if (!ts_queue_.empty() && interpolation_ &&
@@ -387,7 +440,6 @@ public:
           }
 
           // 3) MERGE (partial overlap)
-          // 3) MERGE (partial overlap)
         } else {
           // std::cout << "Merging current trajectory." << std::endl;
 
@@ -400,11 +452,13 @@ public:
           std::deque<crocoddyl_msgs::ControlType> types_merged;
           std::deque<crocoddyl_msgs::ControlParametrization> params_merged;
 
-          // Preserve valid portion of current queue (before t0_new + delay)
+          // Preserve only samples strictly before the new trajectory. Using
+          // t0_new + communication_delay here produces a non-monotonic queue
+          // when the new samples beginning at t0_new are appended.
           std::size_t last_preserved_idx = 0;
           bool preserved_any = false;
           for (std::size_t i = 0; i < ts_queue_.size(); ++i) {
-            if (ts_queue_[i] < t0_new + communication_delay_) {
+            if (ts_queue_[i] < t0_new) {
               ts_merged.push_back(ts_queue_[i]);
               dts_merged.push_back(dts_queue_[i]);
               xs_merged.push_back(xs_queue_[i]);
@@ -486,8 +540,6 @@ public:
               params_queue_.push_back(params_new[i]);
             }
 
-            goto after_merge; // skip the rest of MERGE, queue is already set
-
           } else {
             // Normal MERGE with interpolation: keep prefix, blend from last
             // preserved sample
@@ -523,7 +575,6 @@ public:
             std::swap(params_queue_, params_merged);
           }
         }
-      after_merge:
       }
     }
 
@@ -554,11 +605,27 @@ public:
   /**
    * @brief Indicate whether we have received a new message
    */
-  bool has_new_msg() const { return has_new_msg_; }
+  bool has_new_msg() const {
+    return has_new_msg_.load(std::memory_order_acquire);
+  }
 
-  double get_communication_delay() {
+  double get_communication_delay() const {
     std::lock_guard<std::mutex> guard(mutex_);
     return communication_delay_;
+  }
+
+  /**
+   * @brief Return the time used to select and interpolate trajectory samples.
+   */
+  double get_execution_time() const {
+    return get_clock_time() - get_communication_delay();
+  }
+
+  /**
+   * @brief Return a snapshot of queued timestamps for diagnostics and tests.
+   */
+  std::vector<double> get_queue_timestamps() const {
+    return std::vector<double>(ts_queue_.begin(), ts_queue_.end());
   }
 
 private:
@@ -566,28 +633,24 @@ private:
   std::shared_ptr<rclcpp::Node> node_;
   rclcpp::executors::SingleThreadedExecutor spinner_;
   std::thread thread_;
-  void spin() { spinner_.spin(); }
+  std::atomic_bool stop_requested_{false};
+  void spin() {
+    while (!stop_requested_.load(std::memory_order_acquire)) {
+      spinner_.spin_once(std::chrono::milliseconds(10));
+    }
+  }
   rclcpp::Subscription<SolverTrajectory>::SharedPtr sub_; //!< ROS subscriber
 #else
   ros::NodeHandle node_;
   ros::AsyncSpinner spinner_;
   ros::Subscriber sub_; //!< ROS subscriber
 #endif
-  std::mutex mutex_;       //!< Mutex to prevent race condition on callback
-  SolverTrajectory msg_;   //!< Solver trajectory message
-  bool has_new_msg_;       //!< Indcate when a new message has been received
-  bool is_processing_msg_; //!< Indicate when we are processing the message
-  double last_msg_time_;   //!< Last message time needed to ensure each message
-                           //!< is newer
+  mutable std::mutex mutex_;     //!< Protects the message timing and payload
+  SolverTrajectory msg_;         //!< Solver trajectory message
+  std::atomic_bool has_new_msg_; //!< Indicates a pending unprocessed message
+  double last_msg_time_; //!< Last message time needed to ensure each message
+                         //!< is newer
   double communication_delay_;
-  std::vector<double> ts_;
-  std::vector<double> dts_;
-  std::vector<Eigen::VectorXd> xs_;
-  std::vector<Eigen::VectorXd> dxs_;
-  std::vector<Eigen::VectorXd> us_;
-  std::vector<Eigen::MatrixXd> Ks_;
-  std::vector<crocoddyl_msgs::ControlType> types_;
-  std::vector<crocoddyl_msgs::ControlParametrization> params_;
   std::deque<double> ts_queue_;
   std::deque<double> dts_queue_;
   std::deque<Eigen::VectorXd> xs_queue_;
@@ -599,36 +662,47 @@ private:
 
   bool interpolation_;
   unsigned int interpolation_window_;
+  StateInterpolator state_interpolator_;
+
+  double get_clock_time() const {
+#ifdef ROS2
+    return node_->get_clock()->now().seconds();
+#else
+    return ros::Time::now().toSec();
+#endif
+  }
 
   void callback(SolverTrajectorySharedPtr msg) {
-    if (!is_processing_msg_) {
 #ifdef ROS2
-      double msg_time = rclcpp::Time(msg->header.stamp).seconds();
-      double now = node_->get_clock()->now().seconds();
+    const double msg_time = rclcpp::Time(msg->header.stamp).seconds();
 #else
-      double msg_time = msg->header.stamp.toSec();
-      double now = ros::Time::now().toSec();
+    const double msg_time = msg->header.stamp.toSec();
 #endif
-      communication_delay_ = now - msg_time;
+    const double now = get_clock_time();
+    bool accepted = false;
+    double previous_msg_time = 0.0;
+    {
+      std::lock_guard<std::mutex> guard(mutex_);
+      previous_msg_time = last_msg_time_;
       if (last_msg_time_ <= msg_time) {
-        // std::cout << "Adding new message with initial time: " <<
-        // msg->intervals[0].time << std::endl;
-        std::lock_guard<std::mutex> guard(mutex_);
+        communication_delay_ = std::max(0.0, now - msg_time);
         msg_ = *msg;
-        has_new_msg_ = true;
         last_msg_time_ = msg_time;
-      } else {
-#ifdef ROS2
-        RCLCPP_WARN_STREAM(node_->get_logger(),
-                           "Out of order message. Last timestamp: "
-                               << std::fixed << last_msg_time_
-                               << ", current timestamp: " << msg_time);
-#else
-        ROS_WARN_STREAM("Out of order message. Last timestamp: "
-                        << std::fixed << last_msg_time_
-                        << ", current timestamp: " << msg_time);
-#endif
+        has_new_msg_.store(true, std::memory_order_release);
+        accepted = true;
       }
+    }
+    if (!accepted) {
+#ifdef ROS2
+      RCLCPP_WARN_STREAM(node_->get_logger(),
+                         "Out of order message. Last timestamp: "
+                             << std::fixed << previous_msg_time
+                             << ", current timestamp: " << msg_time);
+#else
+      ROS_WARN_STREAM("Out of order message. Last timestamp: "
+                      << std::fixed << previous_msg_time
+                      << ", current timestamp: " << msg_time);
+#endif
     }
   }
 };

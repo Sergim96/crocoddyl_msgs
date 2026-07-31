@@ -11,7 +11,7 @@
 
 #include "crocoddyl_msgs/conversions.h"
 
-#include <realtime_tools/realtime_publisher.h>
+#include "crocoddyl_msgs/realtime_publisher_compat.h"
 
 #ifdef ROS2
 #include <rclcpp/rclcpp.hpp>
@@ -222,7 +222,7 @@ private:
 #ifdef ROS2
   rclcpp::Node node_;
 #endif
-  realtime_tools::RealtimePublisher<WholeBodyState> pub_;
+  RealtimePublisherCompat<WholeBodyState> pub_;
   pinocchio::Model model_;
   pinocchio::Model reduced_model_;
   pinocchio::Data data_;
