@@ -86,6 +86,54 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
       .value("SLIPPING", ContactStatus::SLIPPING)
       .export_values();
 
+  py::class_<MpcValueFunctionData>(m, "MpcValueFunctionData")
+      .def(py::init<>())
+      .def_readwrite("valid", &MpcValueFunctionData::valid)
+      .def_readwrite("value_valid", &MpcValueFunctionData::value_valid)
+      .def_readwrite("value_constant",
+                     &MpcValueFunctionData::value_constant)
+      .def_readwrite("value_gradient",
+                     &MpcValueFunctionData::value_gradient)
+      .def_readwrite("value_hessian", &MpcValueFunctionData::value_hessian)
+      .def_readwrite("endpoint_value_valid",
+                     &MpcValueFunctionData::endpoint_value_valid)
+      .def_readwrite("endpoint_value_constant",
+                     &MpcValueFunctionData::endpoint_value_constant)
+      .def_readwrite("endpoint_value_gradient",
+                     &MpcValueFunctionData::endpoint_value_gradient)
+      .def_readwrite("endpoint_value_hessian",
+                     &MpcValueFunctionData::endpoint_value_hessian)
+      .def_readwrite("running_cost_valid",
+                     &MpcValueFunctionData::running_cost_valid)
+      .def_readwrite("running_cost_constant",
+                     &MpcValueFunctionData::running_cost_constant)
+      .def_readwrite("running_state_gradient",
+                     &MpcValueFunctionData::running_state_gradient)
+      .def_readwrite("running_control_gradient",
+                     &MpcValueFunctionData::running_control_gradient)
+      .def_readwrite("running_state_hessian",
+                     &MpcValueFunctionData::running_state_hessian)
+      .def_readwrite("running_state_control_hessian",
+                     &MpcValueFunctionData::running_state_control_hessian)
+      .def_readwrite("running_control_hessian",
+                     &MpcValueFunctionData::running_control_hessian)
+      .def_readwrite("action_constant",
+                     &MpcValueFunctionData::action_constant)
+      .def_readwrite("action_state_gradient",
+                     &MpcValueFunctionData::action_state_gradient)
+      .def_readwrite("action_control_gradient",
+                     &MpcValueFunctionData::action_control_gradient)
+      .def_readwrite("action_state_hessian",
+                     &MpcValueFunctionData::action_state_hessian)
+      .def_readwrite("action_state_control_hessian",
+                     &MpcValueFunctionData::action_state_control_hessian)
+      .def_readwrite("action_control_hessian",
+                     &MpcValueFunctionData::action_control_hessian)
+      .def_readwrite("active_contacts",
+                     &MpcValueFunctionData::active_contacts)
+      .def_readwrite("regularization",
+                     &MpcValueFunctionData::regularization);
+
   py::class_<SolverStatisticsRosPublisher,
              std::unique_ptr<SolverStatisticsRosPublisher, py::nodelete>>(
       m, "SolverStatisticsRosPublisher")
@@ -137,12 +185,14 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
            ":param us: list of control parameters of each interval\n"
            ":param Ks: list of feedback gains of each interval\n"
            ":param types: list of control types\n"
-           ":param params: list of control parametrizations",
+           ":param params: list of control parametrizations\n"
+           ":param values: optional list of MPC value/action-value data",
            py::arg("ts"), py::arg("dts"), py::arg("xs"), py::arg("dxs"),
            py::arg("us") = std::vector<Eigen::VectorXd>(),
            py::arg("Ks") = std::vector<Eigen::MatrixXd>(),
            py::arg("types") = std::vector<ControlType>(),
-           py::arg("params") = std::vector<ControlParametrization>());
+           py::arg("params") = std::vector<ControlParametrization>(),
+           py::arg("values") = std::vector<MpcValueFunctionData>());
 
   py::class_<SolverTrajectoryRosSubscriber>(m, "SolverTrajectoryRosSubscriber")
       .def(py::init<const std::string &, bool, unsigned int>(),
@@ -194,7 +244,11 @@ PYBIND11_MODULE(crocoddyl_ros, m) {
            "control_parametrization)\n"
            ":rtype: (float, float, np.ndarray, np.ndarray, np.ndarray, "
            "np.ndarray, int, object)\n\n"
-           ":raises RuntimeError: If the queue is empty or no point is ready.");
+           ":raises RuntimeError: If the queue is empty or no point is ready.")
+      .def("get_current_value_function",
+           &SolverTrajectoryRosSubscriber::get_current_value_function,
+           "Return the value/action-value packet aligned with the current "
+           "trajectory reference.");
   py::class_<WholeBodyStateRosPublisher,
              std::unique_ptr<WholeBodyStateRosPublisher, py::nodelete>>(
       m, "WholeBodyStateRosPublisher")

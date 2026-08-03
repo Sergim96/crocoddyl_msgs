@@ -13,6 +13,13 @@
 
 #include "crocoddyl_msgs/realtime_publisher_compat.h"
 
+#include <atomic>
+#include <chrono>
+#include <cstdint>
+#include <mutex>
+#include <thread>
+#include <vector>
+
 #ifdef ROS2
 #include <rclcpp/rclcpp.hpp>
 #else
@@ -99,7 +106,63 @@ public:
     pub_.msg_.header.frame_id = frame;
     init(locked_joints);
   }
-  ~WholeBodyStateRosPublisher() = default;
+  ~WholeBodyStateRosPublisher() {
+#ifdef ROS2
+    stop_async_publishing();
+#endif
+  }
+
+#ifdef ROS2
+  /**
+   * @brief Move Pinocchio conversion and ROS-message construction off the
+   * caller thread using a bounded, preallocated SPSC queue.
+   *
+   * The producer still snapshots every input synchronously. If the worker
+   * falls a complete queue behind, the newest sample is dropped, matching the
+   * non-blocking behavior of RealtimePublisher::try_publish().
+   */
+  void enable_async_publishing(const std::vector<std::string> &contact_names,
+                               const std::size_t capacity = 64) {
+    if (async_enabled_.load(std::memory_order_acquire)) {
+      return;
+    }
+    if (is_reduced_model_) {
+      throw std::logic_error(
+          "Asynchronous whole-body publication does not support reduced models");
+    }
+    if (capacity < 2) {
+      throw std::invalid_argument(
+          "Asynchronous whole-body publication capacity must be at least two");
+    }
+
+    AsyncSnapshot prototype;
+    prototype.q = Eigen::VectorXd::Zero(model_.nq);
+    prototype.v = Eigen::VectorXd::Zero(model_.nv);
+    prototype.a = Eigen::VectorXd::Zero(model_.nv);
+    prototype.tau =
+        Eigen::VectorXd::Zero(model_.nv - getRootNv(model_));
+    for (const std::string &name : contact_names) {
+      prototype.contact_position.emplace(name, pinocchio::SE3::Identity());
+      prototype.contact_velocity.emplace(name, pinocchio::Motion::Zero());
+      prototype.contact_force.emplace(
+          name, std::make_tuple(pinocchio::Force::Zero(), LOCOMOTION,
+                                SEPARATION));
+      prototype.contact_surface.emplace(
+          name, std::make_pair(Eigen::Vector3d::UnitZ(), 0.0));
+    }
+    async_queue_.assign(capacity, prototype);
+    async_read_sequence_.store(0, std::memory_order_relaxed);
+    async_write_sequence_.store(0, std::memory_order_relaxed);
+    async_dropped_samples_.store(0, std::memory_order_relaxed);
+    async_stop_.store(false, std::memory_order_relaxed);
+    async_enabled_.store(true, std::memory_order_release);
+    async_thread_ = std::thread([this]() { async_publish_loop(); });
+  }
+
+  std::uint64_t get_async_dropped_samples() const {
+    return async_dropped_samples_.load(std::memory_order_relaxed);
+  }
+#endif
 
   /**
    * @brief Publish a whole-body state ROS message.
@@ -125,19 +188,13 @@ public:
                                              ContactStatus>> &f = DEFAULT_FORCE,
       const std::map<std::string, std::pair<Eigen::Vector3d, double>> &s =
           DEFAULT_FRICTION) {
-    if (pub_.trylock()) {
-      pub_.msg_.header.frame_id = odom_frame_;
-      if (is_reduced_model_) {
-        fromReduced(model_, reduced_model_, qfull_, vfull_, ufull_, q, v, tau,
-                    qref_, joint_ids_);
-        crocoddyl_msgs::toMsg(model_, data_, pub_.msg_, t, qfull_, vfull_, a_,
-                              ufull_, p, pd, f, s);
-      } else {
-        crocoddyl_msgs::toMsg(model_, data_, pub_.msg_, t, q, v, a_, tau, p, pd,
-                              f, s);
-      }
-      pub_.unlockAndPublish();
+#ifdef ROS2
+    if (async_enabled_.load(std::memory_order_acquire)) {
+      enqueue_async(t, q, v, a_, tau, p, pd, f, s);
+      return;
     }
+#endif
+    publish_synchronously_without_acceleration(t, q, v, tau, p, pd, f, s);
   }
 
   /**
@@ -164,19 +221,13 @@ public:
                                              ContactStatus>> &f = DEFAULT_FORCE,
       const std::map<std::string, std::pair<Eigen::Vector3d, double>> &s =
           DEFAULT_FRICTION) {
-    if (pub_.trylock()) {
-      pub_.msg_.header.frame_id = odom_frame_;
-      if (is_reduced_model_) {
-        fromReduced(model_, reduced_model_, qfull_, vfull_, afull_, ufull_, q,
-                    v, a, tau, qref_, joint_ids_);
-        crocoddyl_msgs::toMsg(model_, data_, pub_.msg_, t, qfull_, vfull_,
-                              afull_, ufull_, p, pd, f, s);
-      } else {
-        crocoddyl_msgs::toMsg(model_, data_, pub_.msg_, t, q, v, a, tau, p, pd,
-                              f, s);
-      }
-      pub_.unlockAndPublish();
+#ifdef ROS2
+    if (async_enabled_.load(std::memory_order_acquire)) {
+      enqueue_async(t, q, v, a, tau, p, pd, f, s);
+      return;
     }
+#endif
+    publish_synchronously(t, q, v, a, tau, p, pd, f, s);
   }
 
   /**
@@ -196,6 +247,9 @@ public:
    */
   void update_body_inertial_parameters(const std::string &body_name,
                                        const Eigen::Ref<const Vector10d> &psi) {
+#ifdef ROS2
+    std::lock_guard<std::mutex> guard(model_mutex_);
+#endif
     updateBodyInertialParameters(model_, body_name, psi);
     if (is_reduced_model_)
       updateBodyInertialParameters(reduced_model_, body_name, psi);
@@ -215,6 +269,9 @@ public:
    */
   const Vector10d
   get_body_inertial_parameters(const std::string &body_name) const {
+#ifdef ROS2
+    std::lock_guard<std::mutex> guard(model_mutex_);
+#endif
     return getBodyInertialParameters(model_, body_name);
   }
 
@@ -236,6 +293,191 @@ private:
   Eigen::VectorXd ufull_;
   bool is_reduced_model_;
   pinocchio::Inertia inertia_tmp_;
+
+#ifdef ROS2
+  struct AsyncSnapshot {
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+    double time{0.0};
+    Eigen::VectorXd q;
+    Eigen::VectorXd v;
+    Eigen::VectorXd a;
+    Eigen::VectorXd tau;
+    std::map<std::string, pinocchio::SE3> contact_position;
+    std::map<std::string, pinocchio::Motion> contact_velocity;
+    std::map<std::string,
+             std::tuple<pinocchio::Force, ContactType, ContactStatus>>
+        contact_force;
+    std::map<std::string, std::pair<Eigen::Vector3d, double>> contact_surface;
+  };
+
+  std::vector<AsyncSnapshot, Eigen::aligned_allocator<AsyncSnapshot>>
+      async_queue_;
+  std::atomic<std::uint64_t> async_read_sequence_{0};
+  std::atomic<std::uint64_t> async_write_sequence_{0};
+  std::atomic<std::uint64_t> async_dropped_samples_{0};
+  std::atomic_bool async_enabled_{false};
+  std::atomic_bool async_stop_{false};
+  std::thread async_thread_;
+  mutable std::mutex model_mutex_;
+#endif
+
+  void publish_synchronously(
+      const double t, const Eigen::Ref<const Eigen::VectorXd> &q,
+      const Eigen::Ref<const Eigen::VectorXd> &v,
+      const Eigen::Ref<const Eigen::VectorXd> &a,
+      const Eigen::Ref<const Eigen::VectorXd> &tau,
+      const std::map<std::string, pinocchio::SE3> &p,
+      const std::map<std::string, pinocchio::Motion> &pd,
+      const std::map<std::string,
+                     std::tuple<pinocchio::Force, ContactType, ContactStatus>>
+          &f,
+      const std::map<std::string, std::pair<Eigen::Vector3d, double>> &s) {
+#ifdef ROS2
+    std::lock_guard<std::mutex> model_guard(model_mutex_);
+#endif
+    if (!pub_.trylock()) {
+      return;
+    }
+    pub_.msg_.header.frame_id = odom_frame_;
+    if (is_reduced_model_) {
+      fromReduced(model_, reduced_model_, qfull_, vfull_, afull_, ufull_, q, v,
+                  a, tau, qref_, joint_ids_);
+      crocoddyl_msgs::toMsg(model_, data_, pub_.msg_, t, qfull_, vfull_,
+                            afull_, ufull_, p, pd, f, s);
+    } else {
+      crocoddyl_msgs::toMsg(model_, data_, pub_.msg_, t, q, v, a, tau, p, pd,
+                            f, s);
+    }
+    pub_.unlockAndPublish();
+  }
+
+  void publish_synchronously_without_acceleration(
+      const double t, const Eigen::Ref<const Eigen::VectorXd> &q,
+      const Eigen::Ref<const Eigen::VectorXd> &v,
+      const Eigen::Ref<const Eigen::VectorXd> &tau,
+      const std::map<std::string, pinocchio::SE3> &p,
+      const std::map<std::string, pinocchio::Motion> &pd,
+      const std::map<std::string,
+                     std::tuple<pinocchio::Force, ContactType, ContactStatus>>
+          &f,
+      const std::map<std::string, std::pair<Eigen::Vector3d, double>> &s) {
+#ifdef ROS2
+    std::lock_guard<std::mutex> model_guard(model_mutex_);
+#endif
+    if (!pub_.trylock()) {
+      return;
+    }
+    pub_.msg_.header.frame_id = odom_frame_;
+    if (is_reduced_model_) {
+      fromReduced(model_, reduced_model_, qfull_, vfull_, ufull_, q, v, tau,
+                  qref_, joint_ids_);
+      crocoddyl_msgs::toMsg(model_, data_, pub_.msg_, t, qfull_, vfull_, a_,
+                            ufull_, p, pd, f, s);
+    } else {
+      crocoddyl_msgs::toMsg(model_, data_, pub_.msg_, t, q, v, a_, tau, p, pd,
+                            f, s);
+    }
+    pub_.unlockAndPublish();
+  }
+
+#ifdef ROS2
+  template <typename MapT>
+  static void copy_contact_values(MapT &destination, const MapT &source,
+                                  const char *label) {
+    if (destination.size() != source.size()) {
+      throw std::invalid_argument(std::string("Unexpected ") + label +
+                                  " contact count");
+    }
+    for (auto &item : destination) {
+      const auto source_item = source.find(item.first);
+      if (source_item == source.end()) {
+        throw std::invalid_argument(std::string("Missing ") + label +
+                                    " contact '" + item.first + "'");
+      }
+      item.second = source_item->second;
+    }
+  }
+
+  void enqueue_async(
+      const double t, const Eigen::Ref<const Eigen::VectorXd> &q,
+      const Eigen::Ref<const Eigen::VectorXd> &v,
+      const Eigen::Ref<const Eigen::VectorXd> &a,
+      const Eigen::Ref<const Eigen::VectorXd> &tau,
+      const std::map<std::string, pinocchio::SE3> &p,
+      const std::map<std::string, pinocchio::Motion> &pd,
+      const std::map<std::string,
+                     std::tuple<pinocchio::Force, ContactType, ContactStatus>>
+          &f,
+      const std::map<std::string, std::pair<Eigen::Vector3d, double>> &s) {
+    if (q.size() != model_.nq || v.size() != model_.nv ||
+        a.size() != model_.nv ||
+        tau.size() != model_.nv - static_cast<Eigen::Index>(getRootNv(model_))) {
+      throw std::invalid_argument(
+          "Asynchronous whole-body state dimensions do not match the model");
+    }
+    const std::uint64_t write =
+        async_write_sequence_.load(std::memory_order_relaxed);
+    const std::uint64_t read =
+        async_read_sequence_.load(std::memory_order_acquire);
+    if (write - read >= async_queue_.size()) {
+      async_dropped_samples_.fetch_add(1, std::memory_order_relaxed);
+      return;
+    }
+
+    AsyncSnapshot &snapshot = async_queue_[write % async_queue_.size()];
+    snapshot.time = t;
+    snapshot.q = q;
+    snapshot.v = v;
+    snapshot.a = a;
+    snapshot.tau = tau;
+    copy_contact_values(snapshot.contact_position, p, "position");
+    copy_contact_values(snapshot.contact_velocity, pd, "velocity");
+    copy_contact_values(snapshot.contact_force, f, "force");
+    copy_contact_values(snapshot.contact_surface, s, "surface");
+    async_write_sequence_.store(write + 1, std::memory_order_release);
+  }
+
+  void async_publish_loop() {
+    while (true) {
+      const std::uint64_t read =
+          async_read_sequence_.load(std::memory_order_relaxed);
+      const std::uint64_t write =
+          async_write_sequence_.load(std::memory_order_acquire);
+      if (read == write) {
+        if (async_stop_.load(std::memory_order_acquire)) {
+          break;
+        }
+        std::this_thread::sleep_for(std::chrono::microseconds(50));
+        continue;
+      }
+
+      const AsyncSnapshot &snapshot =
+          async_queue_[read % async_queue_.size()];
+      try {
+        publish_synchronously(
+            snapshot.time, snapshot.q, snapshot.v, snapshot.a, snapshot.tau,
+            snapshot.contact_position, snapshot.contact_velocity,
+            snapshot.contact_force, snapshot.contact_surface);
+      } catch (const std::exception &error) {
+        RCLCPP_ERROR(node_.get_logger(),
+                     "Asynchronous whole-body publication failed: %s",
+                     error.what());
+      }
+      async_read_sequence_.store(read + 1, std::memory_order_release);
+    }
+  }
+
+  void stop_async_publishing() {
+    if (!async_enabled_.exchange(false, std::memory_order_acq_rel)) {
+      return;
+    }
+    async_stop_.store(true, std::memory_order_release);
+    if (async_thread_.joinable()) {
+      async_thread_.join();
+    }
+  }
+#endif
 
   void init(const std::vector<std::string> &locked_joints = DEFAULT_VECTOR) {
     a_.setZero();

@@ -16,6 +16,7 @@
 #include <cmath>
 #include <deque>
 #include <functional>
+#include <limits>
 #include <thread>
 #include <utility>
 
@@ -130,6 +131,12 @@ public:
           "The size of the control trajectory vector needs to equal "
           "the size of the intervals vector.");
     }
+    if (!message.value_trajectory.empty() &&
+        message.value_trajectory.size() != N) {
+      throw std::invalid_argument(
+          "The size of the MPC value trajectory needs to be empty or equal "
+          "the size of the intervals vector.");
+    }
     std::vector<double> ts(N);
     std::vector<double> dts(N);
     std::vector<Eigen::VectorXd> xs(N);
@@ -138,6 +145,7 @@ public:
     std::vector<Eigen::MatrixXd> Ks(N);
     std::vector<crocoddyl_msgs::ControlType> types(N);
     std::vector<crocoddyl_msgs::ControlParametrization> params(N);
+    std::vector<MpcValueFunctionData> values(N);
     for (std::size_t i = 0; i < N; ++i) {
       const TimeInterval &interval = message.intervals[i];
       const State &state = message.state_trajectory[i];
@@ -161,7 +169,17 @@ public:
         throw std::invalid_argument(
             "Trajectory state, control and feedback data must be finite.");
       }
+      if (!message.value_trajectory.empty()) {
+        values[i] = crocoddyl_msgs::fromMsg(message.value_trajectory[i]);
+        if (values[i].value_gradient.size() != dxs[i].size() ||
+            values[i].action_control_gradient.size() != us[i].size()) {
+          throw std::invalid_argument(
+              "MPC value dimensions do not match trajectory state/control "
+              "dimensions.");
+        }
+      }
     }
+    parsed_values_ = std::move(values);
     return {ts, dts, xs, dxs, us, Ks, types, params};
   }
 
@@ -205,8 +223,9 @@ public:
              Eigen::MatrixXd, crocoddyl_msgs::ControlType,
              crocoddyl_msgs::ControlParametrization>
   get_current_reference() {
-    const double now = get_clock_time();
     const double communication_delay = get_communication_delay();
+    const double t_now = get_reference_execution_time();
+    const double now = t_now + communication_delay;
 
     if (ts_queue_.empty()) {
       throw std::runtime_error("Reference queue is empty.");
@@ -214,8 +233,6 @@ public:
 
     double t0 = ts_queue_.front();
     double dt0 = dts_queue_.front();
-    const double t_now = now - communication_delay;
-
     // Handle the case of only one element and it's too old
     if (ts_queue_.size() == 1 && t_now > t0 + dt0) {
       ts_queue_.clear();
@@ -226,6 +243,7 @@ public:
       Ks_queue_.clear();
       types_queue_.clear();
       params_queue_.clear();
+      values_queue_.clear();
       throw std::runtime_error(
           "[SolverTrajectoryRosSubscriber::get_current_reference] "
           "Single remaining point is too old. Queue cleared.");
@@ -243,6 +261,7 @@ public:
         Ks_queue_.pop_front();
         types_queue_.pop_front();
         params_queue_.pop_front();
+        values_queue_.pop_front();
       }
       return {ts_queue_.front(),    dts_queue_.front(),   xs_queue_.front(),
               dxs_queue_.front(),   us_queue_.front(),    Ks_queue_.front(),
@@ -259,6 +278,31 @@ public:
         << "Current time - delay: " << t_now << "\n"
         << "Time to wait: " << (t0 - t_now) << "s";
     throw std::runtime_error(oss.str());
+  }
+
+  /** Return the value/action-value data aligned with the current reference. */
+  MpcValueFunctionData get_current_value_function() const {
+    return get_value_function(0);
+  }
+
+  /** Return value data at an offset from the current queued reference. */
+  MpcValueFunctionData get_value_function(const std::size_t offset) const {
+    return get_value_function_reference(offset);
+  }
+
+  /**
+   * Return a non-owning reference for allocation-free real-time consumption.
+   * The reference remains valid only until the next queue-processing call.
+   */
+  const MpcValueFunctionData &get_value_function_reference(
+      const std::size_t offset) const {
+    if (values_queue_.empty()) {
+      throw std::runtime_error("MPC value reference queue is empty.");
+    }
+    if (offset >= values_queue_.size()) {
+      throw std::runtime_error("Requested MPC value offset is unavailable.");
+    }
+    return values_queue_[offset];
   }
 
   /**
@@ -311,11 +355,16 @@ public:
     const bool pending_message = has_new_msg();
     const double communication_delay = get_communication_delay();
     const double t_now = get_clock_time() - communication_delay;
+    // Preserve the exact timestamp used to expire/select the queue head. A
+    // consumer that reads the clock again later in the same control cycle can
+    // otherwise cross an interval boundary while still holding the old head.
+    reference_execution_time_ = t_now;
 
     // STEP 1: Handle new message if available
     if (pending_message) {
       auto [ts_new, dts_new, xs_new, dxs_new, us_new, Ks_new, types_new,
             params_new] = get_solver_trajectory(); // by value, safe to modify
+      std::vector<MpcValueFunctionData> values_new = std::move(parsed_values_);
       processed_new_message = true;
 
       if (ts_new.empty()) {
@@ -375,6 +424,12 @@ public:
                 dxs_new[i] = (1.0 - alpha) * dx_old + alpha * dxs_new[i];
                 us_new[i] = (1.0 - alpha) * u_old + alpha * us_new[i];
                 Ks_new[i] = (1.0 - alpha) * K_old + alpha * Ks_new[i];
+                // The quadratic is anchored at the unblended state. There is
+                // no coordinate-invariant linear interpolation for it.
+                values_new[i].valid = false;
+                values_new[i].value_valid = false;
+                values_new[i].endpoint_value_valid = false;
+                values_new[i].running_cost_valid = false;
               }
             };
 
@@ -409,6 +464,7 @@ public:
           Ks_queue_.assign(Ks_new.begin(), Ks_new.end());
           types_queue_.assign(types_new.begin(), types_new.end());
           params_queue_.assign(params_new.begin(), params_new.end());
+          values_queue_.assign(values_new.begin(), values_new.end());
 
           // 2) APPEND (new starts after current ends)
         } else if (tN_cur + timing_tolerance < t0_new) {
@@ -437,6 +493,7 @@ public:
             Ks_queue_.push_back(Ks_new[i]);
             types_queue_.push_back(types_new[i]);
             params_queue_.push_back(params_new[i]);
+            values_queue_.push_back(values_new[i]);
           }
 
           // 3) MERGE (partial overlap)
@@ -451,6 +508,7 @@ public:
           std::deque<Eigen::MatrixXd> Ks_merged;
           std::deque<crocoddyl_msgs::ControlType> types_merged;
           std::deque<crocoddyl_msgs::ControlParametrization> params_merged;
+          std::deque<MpcValueFunctionData> values_merged;
 
           // Preserve only samples strictly before the new trajectory. Using
           // t0_new + communication_delay here produces a non-monotonic queue
@@ -467,6 +525,7 @@ public:
               Ks_merged.push_back(Ks_queue_[i]);
               types_merged.push_back(types_queue_[i]);
               params_merged.push_back(params_queue_[i]);
+              values_merged.push_back(values_queue_[i]);
 
               last_preserved_idx = ts_merged.size() - 1;
               preserved_any = true;
@@ -490,6 +549,7 @@ public:
               Ks_merged.push_back(Ks_new[i]);
               types_merged.push_back(types_new[i]);
               params_merged.push_back(params_new[i]);
+              values_merged.push_back(values_new[i]);
             }
 
             std::swap(ts_queue_, ts_merged);
@@ -500,6 +560,7 @@ public:
             std::swap(Ks_queue_, Ks_merged);
             std::swap(types_queue_, types_merged);
             std::swap(params_queue_, params_merged);
+            std::swap(values_queue_, values_merged);
 
           } else if (!preserved_any) {
             // No prefix preserved -> this is effectively a REPLACE with
@@ -528,6 +589,7 @@ public:
             Ks_queue_.clear();
             types_queue_.clear();
             params_queue_.clear();
+            values_queue_.clear();
 
             for (std::size_t i = 0; i < ts_new.size(); ++i) {
               ts_queue_.push_back(ts_new[i]);
@@ -538,6 +600,7 @@ public:
               Ks_queue_.push_back(Ks_new[i]);
               types_queue_.push_back(types_new[i]);
               params_queue_.push_back(params_new[i]);
+              values_queue_.push_back(values_new[i]);
             }
 
           } else {
@@ -562,6 +625,7 @@ public:
               Ks_merged.push_back(Ks_new[i]);
               types_merged.push_back(types_new[i]);
               params_merged.push_back(params_new[i]);
+              values_merged.push_back(values_new[i]);
             }
 
             // Commit merged queue
@@ -573,6 +637,7 @@ public:
             std::swap(Ks_queue_, Ks_merged);
             std::swap(types_queue_, types_merged);
             std::swap(params_queue_, params_merged);
+            std::swap(values_queue_, values_merged);
           }
         }
       }
@@ -591,6 +656,7 @@ public:
       Ks_queue_.pop_front();
       types_queue_.pop_front();
       params_queue_.pop_front();
+      values_queue_.pop_front();
     }
 
     // Now check the head entry
@@ -619,6 +685,15 @@ public:
    */
   double get_execution_time() const {
     return get_clock_time() - get_communication_delay();
+  }
+
+  /** Return the timestamp used by the most recent queue-processing call. */
+  double get_reference_execution_time() const {
+    if (!std::isfinite(reference_execution_time_)) {
+      throw std::runtime_error(
+          "The solver trajectory queue has not been processed yet.");
+    }
+    return reference_execution_time_;
   }
 
   /**
@@ -651,6 +726,8 @@ private:
   double last_msg_time_; //!< Last message time needed to ensure each message
                          //!< is newer
   double communication_delay_;
+  double reference_execution_time_{
+      std::numeric_limits<double>::quiet_NaN()};
   std::deque<double> ts_queue_;
   std::deque<double> dts_queue_;
   std::deque<Eigen::VectorXd> xs_queue_;
@@ -659,6 +736,8 @@ private:
   std::deque<Eigen::MatrixXd> Ks_queue_;
   std::deque<crocoddyl_msgs::ControlType> types_queue_;
   std::deque<crocoddyl_msgs::ControlParametrization> params_queue_;
+  std::deque<MpcValueFunctionData> values_queue_;
+  std::vector<MpcValueFunctionData> parsed_values_;
 
   bool interpolation_;
   unsigned int interpolation_window_;

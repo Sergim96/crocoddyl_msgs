@@ -19,3 +19,7 @@ crocoddyl_msgs/State[] state_trajectory
 
 # This represents the control for each interval
 crocoddyl_msgs/Control[] control_trajectory
+
+# Optional local value/action-value approximations, index-aligned with the
+# intervals above. Legacy publishers may leave this empty.
+crocoddyl_msgs/MpcValueFunction[] value_trajectory

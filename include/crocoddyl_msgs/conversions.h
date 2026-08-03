@@ -23,6 +23,8 @@
 #include <pinocchio/spatial/force.hpp>
 #include <pinocchio/spatial/motion.hpp>
 
+#include "crocoddyl_msgs/mpc_value_function.h"
+
 #include <pinocchio/bindings/python/pybind11.hpp>
 #define SCALAR double
 #define OPTIONS 0
@@ -32,6 +34,7 @@
 #ifdef ROS2
 #include "crocoddyl_msgs/msg/control.hpp"
 #include "crocoddyl_msgs/msg/feedback_gain.hpp"
+#include "crocoddyl_msgs/msg/mpc_value_function.hpp"
 #include "crocoddyl_msgs/msg/multibody_inertia.hpp"
 #include "crocoddyl_msgs/msg/state.hpp"
 #include "crocoddyl_msgs/msg/time_interval.hpp"
@@ -41,6 +44,7 @@
 #else
 #include "crocoddyl_msgs/Control.h"
 #include "crocoddyl_msgs/FeedbackGain.h"
+#include "crocoddyl_msgs/MpcValueFunction.h"
 #include "crocoddyl_msgs/MultibodyInertia.h"
 #include "crocoddyl_msgs/State.h"
 #include "crocoddyl_msgs/TimeInterval.h"
@@ -67,6 +71,7 @@ typedef crocoddyl_msgs::msg::TimeInterval TimeInterval;
 typedef crocoddyl_msgs::msg::State State;
 typedef crocoddyl_msgs::msg::Control Control;
 typedef crocoddyl_msgs::msg::FeedbackGain FeedbackGain;
+typedef crocoddyl_msgs::msg::MpcValueFunction MpcValueFunction;
 typedef crocoddyl_msgs::msg::BodyInertia BodyInertia;
 typedef crocoddyl_msgs::msg::MultibodyInertia MultibodyInertia;
 typedef whole_body_state_msgs::msg::WholeBodyState WholeBodyState;
@@ -77,12 +82,218 @@ typedef crocoddyl_msgs::TimeInterval TimeInterval;
 typedef crocoddyl_msgs::State State;
 typedef crocoddyl_msgs::Control Control;
 typedef crocoddyl_msgs::FeedbackGain FeedbackGain;
+typedef crocoddyl_msgs::MpcValueFunction MpcValueFunction;
 typedef crocoddyl_msgs::BodyInertia BodyInertia;
 typedef crocoddyl_msgs::MultibodyInertia MultibodyInertia;
 typedef whole_body_state_msgs::WholeBodyState WholeBodyState;
 typedef whole_body_state_msgs::WholeBodyTrajectory WholeBodyTrajectory;
 typedef whole_body_state_msgs::ContactState ContactState;
 #endif
+
+static inline void toRowMajor(std::vector<double> &output,
+                              const Eigen::Ref<const Eigen::MatrixXd> &input) {
+  output.resize(static_cast<std::size_t>(input.rows() * input.cols()));
+  for (Eigen::Index row = 0; row < input.rows(); ++row) {
+    for (Eigen::Index column = 0; column < input.cols(); ++column) {
+      output[static_cast<std::size_t>(row * input.cols() + column)] =
+          input(row, column);
+    }
+  }
+}
+
+static inline Eigen::MatrixXd fromRowMajor(const std::vector<double> &input,
+                                           const Eigen::Index rows,
+                                           const Eigen::Index columns,
+                                           const char *name) {
+  if (rows < 0 || columns < 0 ||
+      input.size() != static_cast<std::size_t>(rows * columns)) {
+    throw std::invalid_argument(std::string("Invalid ") + name +
+                                " matrix dimensions");
+  }
+  Eigen::MatrixXd output(rows, columns);
+  for (Eigen::Index row = 0; row < rows; ++row) {
+    for (Eigen::Index column = 0; column < columns; ++column) {
+      output(row, column) =
+          input[static_cast<std::size_t>(row * columns + column)];
+    }
+  }
+  return output;
+}
+
+static inline void toMsg(MpcValueFunction &msg,
+                         const MpcValueFunctionData &value) {
+  const Eigen::Index ndx = value.value_gradient.size();
+  const Eigen::Index nu = value.action_control_gradient.size();
+  if (ndx <= 0 || nu <= 0 ||
+      value.value_hessian.rows() != ndx ||
+      value.value_hessian.cols() != ndx ||
+      (value.endpoint_value_valid &&
+       (value.endpoint_value_gradient.size() != ndx ||
+        value.endpoint_value_hessian.rows() != ndx ||
+        value.endpoint_value_hessian.cols() != ndx)) ||
+      (value.running_cost_valid &&
+       (value.running_state_gradient.size() != ndx ||
+        value.running_control_gradient.size() != nu ||
+        value.running_state_hessian.rows() != ndx ||
+        value.running_state_hessian.cols() != ndx ||
+        value.running_state_control_hessian.rows() != ndx ||
+        value.running_state_control_hessian.cols() != nu ||
+        value.running_control_hessian.rows() != nu ||
+        value.running_control_hessian.cols() != nu)) ||
+      value.action_state_gradient.size() != ndx ||
+      value.action_state_hessian.rows() != ndx ||
+      value.action_state_hessian.cols() != ndx ||
+      value.action_state_control_hessian.rows() != ndx ||
+      value.action_state_control_hessian.cols() != nu ||
+      value.action_control_hessian.rows() != nu ||
+      value.action_control_hessian.cols() != nu) {
+    throw std::invalid_argument(
+        "Inconsistent MPC value/action-value dimensions");
+  }
+  msg.valid = value.valid;
+  msg.value_valid = value.value_valid;
+  msg.ndx = static_cast<uint32_t>(ndx);
+  msg.nu = static_cast<uint32_t>(nu);
+  msg.value_constant = value.value_constant;
+  msg.value_gradient.assign(value.value_gradient.data(),
+                            value.value_gradient.data() + ndx);
+  toRowMajor(msg.value_hessian, value.value_hessian);
+  msg.endpoint_value_valid = value.endpoint_value_valid;
+  msg.endpoint_value_constant = value.endpoint_value_constant;
+  if (value.endpoint_value_valid) {
+    msg.endpoint_value_gradient.assign(value.endpoint_value_gradient.data(),
+                                       value.endpoint_value_gradient.data() +
+                                           ndx);
+    toRowMajor(msg.endpoint_value_hessian, value.endpoint_value_hessian);
+  } else {
+    msg.endpoint_value_gradient.clear();
+    msg.endpoint_value_hessian.clear();
+  }
+  msg.running_cost_valid = value.running_cost_valid;
+  msg.running_cost_constant = value.running_cost_constant;
+  if (value.running_cost_valid) {
+    msg.running_state_gradient.assign(value.running_state_gradient.data(),
+                                      value.running_state_gradient.data() +
+                                          ndx);
+    msg.running_control_gradient.assign(
+        value.running_control_gradient.data(),
+        value.running_control_gradient.data() + nu);
+    toRowMajor(msg.running_state_hessian, value.running_state_hessian);
+    toRowMajor(msg.running_state_control_hessian,
+               value.running_state_control_hessian);
+    toRowMajor(msg.running_control_hessian, value.running_control_hessian);
+  } else {
+    msg.running_state_gradient.clear();
+    msg.running_control_gradient.clear();
+    msg.running_state_hessian.clear();
+    msg.running_state_control_hessian.clear();
+    msg.running_control_hessian.clear();
+  }
+  msg.action_constant = value.action_constant;
+  msg.action_state_gradient.assign(value.action_state_gradient.data(),
+                                   value.action_state_gradient.data() + ndx);
+  msg.action_control_gradient.assign(
+      value.action_control_gradient.data(),
+      value.action_control_gradient.data() + nu);
+  toRowMajor(msg.action_state_hessian, value.action_state_hessian);
+  toRowMajor(msg.action_state_control_hessian,
+             value.action_state_control_hessian);
+  toRowMajor(msg.action_control_hessian, value.action_control_hessian);
+  msg.active_contacts = value.active_contacts;
+  msg.regularization = value.regularization;
+}
+
+static inline MpcValueFunctionData fromMsg(const MpcValueFunction &msg) {
+  const Eigen::Index ndx = static_cast<Eigen::Index>(msg.ndx);
+  const Eigen::Index nu = static_cast<Eigen::Index>(msg.nu);
+  if (ndx <= 0 || nu <= 0 ||
+      msg.value_gradient.size() != static_cast<std::size_t>(ndx) ||
+      msg.action_state_gradient.size() != static_cast<std::size_t>(ndx) ||
+      msg.action_control_gradient.size() != static_cast<std::size_t>(nu)) {
+    throw std::invalid_argument(
+        "Invalid MPC value/action-value vector dimensions");
+  }
+  MpcValueFunctionData value;
+  value.valid = msg.valid;
+  value.value_valid = msg.value_valid;
+  value.value_constant = msg.value_constant;
+  value.value_gradient = Eigen::Map<const Eigen::VectorXd>(
+      msg.value_gradient.data(), ndx);
+  value.value_hessian =
+      fromRowMajor(msg.value_hessian, ndx, ndx, "value Hessian");
+  value.endpoint_value_valid = msg.endpoint_value_valid;
+  value.endpoint_value_constant = msg.endpoint_value_constant;
+  if (value.endpoint_value_valid) {
+    if (msg.endpoint_value_gradient.size() !=
+        static_cast<std::size_t>(ndx)) {
+      throw std::invalid_argument(
+          "Invalid endpoint MPC value gradient dimensions");
+    }
+    value.endpoint_value_gradient = Eigen::Map<const Eigen::VectorXd>(
+        msg.endpoint_value_gradient.data(), ndx);
+    value.endpoint_value_hessian = fromRowMajor(
+        msg.endpoint_value_hessian, ndx, ndx, "endpoint value Hessian");
+  }
+  value.running_cost_valid = msg.running_cost_valid;
+  value.running_cost_constant = msg.running_cost_constant;
+  if (value.running_cost_valid) {
+    if (msg.running_state_gradient.size() !=
+            static_cast<std::size_t>(ndx) ||
+        msg.running_control_gradient.size() !=
+            static_cast<std::size_t>(nu)) {
+      throw std::invalid_argument(
+          "Invalid running-cost gradient dimensions");
+    }
+    value.running_state_gradient = Eigen::Map<const Eigen::VectorXd>(
+        msg.running_state_gradient.data(), ndx);
+    value.running_control_gradient = Eigen::Map<const Eigen::VectorXd>(
+        msg.running_control_gradient.data(), nu);
+    value.running_state_hessian = fromRowMajor(
+        msg.running_state_hessian, ndx, ndx, "running state Hessian");
+    value.running_state_control_hessian = fromRowMajor(
+        msg.running_state_control_hessian, ndx, nu,
+        "running state-control Hessian");
+    value.running_control_hessian = fromRowMajor(
+        msg.running_control_hessian, nu, nu, "running control Hessian");
+  }
+  value.action_constant = msg.action_constant;
+  value.action_state_gradient = Eigen::Map<const Eigen::VectorXd>(
+      msg.action_state_gradient.data(), ndx);
+  value.action_control_gradient = Eigen::Map<const Eigen::VectorXd>(
+      msg.action_control_gradient.data(), nu);
+  value.action_state_hessian = fromRowMajor(
+      msg.action_state_hessian, ndx, ndx, "action state Hessian");
+  value.action_state_control_hessian =
+      fromRowMajor(msg.action_state_control_hessian, ndx, nu,
+                   "action state-control Hessian");
+  value.action_control_hessian = fromRowMajor(
+      msg.action_control_hessian, nu, nu, "action control Hessian");
+  value.active_contacts = msg.active_contacts;
+  value.regularization = msg.regularization;
+  if (!std::isfinite(value.value_constant) ||
+      !std::isfinite(value.endpoint_value_constant) ||
+      !std::isfinite(value.running_cost_constant) ||
+      !std::isfinite(value.action_constant) ||
+      !std::isfinite(value.regularization) ||
+      !value.value_gradient.allFinite() || !value.value_hessian.allFinite() ||
+      (value.endpoint_value_valid &&
+       (!value.endpoint_value_gradient.allFinite() ||
+        !value.endpoint_value_hessian.allFinite())) ||
+      (value.running_cost_valid &&
+       (!value.running_state_gradient.allFinite() ||
+        !value.running_control_gradient.allFinite() ||
+        !value.running_state_hessian.allFinite() ||
+        !value.running_state_control_hessian.allFinite() ||
+        !value.running_control_hessian.allFinite())) ||
+      !value.action_state_gradient.allFinite() ||
+      !value.action_control_gradient.allFinite() ||
+      !value.action_state_hessian.allFinite() ||
+      !value.action_state_control_hessian.allFinite() ||
+      !value.action_control_hessian.allFinite()) {
+    throw std::invalid_argument("MPC value/action-value data must be finite");
+  }
+  return value;
+}
 
 /**
  * @brief Return the root joint id

@@ -80,7 +80,8 @@ public:
                const std::vector<Eigen::VectorXd> &us = {},
                const std::vector<Eigen::MatrixXd> &Ks = {},
                const std::vector<ControlType> &types = {},
-               const std::vector<ControlParametrization> &params = {}) {
+               const std::vector<ControlParametrization> &params = {},
+               const std::vector<MpcValueFunctionData> &values = {}) {
     if (ts.size() != dts.size()) {
       throw std::invalid_argument("The size of the ts vector needs to equal "
                                   "the size of the dts vector.");
@@ -109,6 +110,10 @@ public:
       throw std::invalid_argument("The size of the ts vector needs to equal "
                                   "the size of the params.");
     }
+    if (!values.empty() && ts.size() != values.size()) {
+      throw std::invalid_argument("The size of the ts vector needs to equal "
+                                  "the size of the MPC values.");
+    }
 
 #ifdef ROS2
     // Caracal calls this publisher from its non-real-time MPC thread.  A
@@ -129,12 +134,16 @@ public:
     message.intervals.resize(N);
     message.state_trajectory.resize(N);
     message.control_trajectory.resize(N);
+    message.value_trajectory.resize(values.empty() ? 0 : N);
     for (std::size_t i = 0; i < N; ++i) {
       message.intervals[i].time = ts[i];
       message.intervals[i].duration = dts[i];
       crocoddyl_msgs::toMsg(message.state_trajectory[i], xs[i], dxs[i]);
       crocoddyl_msgs::toMsg(message.control_trajectory[i], us[i], Ks[i],
                             types[i], params[i]);
+      if (!values.empty()) {
+        crocoddyl_msgs::toMsg(message.value_trajectory[i], values[i]);
+      }
     }
 #ifdef ROS2
     pub_->publish(message);

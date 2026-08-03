@@ -53,6 +53,7 @@ if($ENV{ROS_VERSION} EQUAL 2) # ROS 2
     "msg/State.msg"
     "msg/Control.msg"
     "msg/FeedbackGain.msg"
+    "msg/MpcValueFunction.msg"
     "msg/SolverStatistics.msg"
     "msg/SolverTrajectory.msg"
     "msg/BodyInertia.msg"
@@ -127,6 +128,7 @@ else() # ROS 1
     State.msg
     Control.msg
     FeedbackGain.msg
+    MpcValueFunction.msg
     SolverStatistics.msg
     SolverTrajectory.msg
     BodyInertia.msg
